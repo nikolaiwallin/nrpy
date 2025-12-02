@@ -129,6 +129,7 @@ def _generate_main_body(
     pre_diagnostics: str,
     pre_MoL_step_forward_in_time: str,
     post_MoL_step_forward_in_time: str,
+    main_data_extract: bool=False,
 ) -> str:
     """
     Generate the C code for the body of the main() function.
@@ -242,7 +243,14 @@ for(int grid=0; grid<commondata.NUMGRIDS; grid++)
         body_parts.append(post_non_y_n_auxevol_mallocs)
 
     # Step 5: Main simulation loop.
-    diagnostics_call_args = f"&commondata, {f'{compute_griddata}, griddata_host' if is_cuda else compute_griddata}"
+    diagnostics_call_args = f"""&commondata, {f'{compute_griddata}, griddata_host{', AH_data' if main_data_extract else ''}' if is_cuda else f'{compute_griddata}{', AH_data' if main_data_extract else ''}'}"""
+
+    if main_data_extract:
+        body_parts.append(
+            f"""
+        REAL AH_data[18];
+        """
+        )
     body_parts.append(
         """
 // Step 5: MAIN SIMULATION LOOP
@@ -258,7 +266,7 @@ while(commondata.time < commondata.t_final) { // Main loop to progress forward i
     body_parts.append(
         f"""
   // Step 5.b: Main loop, part 2: Output diagnostics
-  diagnostics({diagnostics_call_args});
+  {f"diagnostics({diagnostics_call_args})" if main_data_extract else f"diagnostics({diagnostics_call_args})"};
 
   // Step 5.c: Main loop, part 3 (pre_MoL_step_forward_in_time): Prepare to step forward in time
 """
@@ -329,6 +337,7 @@ def register_CFunction_main_c(
     pre_diagnostics: str = "",
     pre_MoL_step_forward_in_time: str = "",
     post_MoL_step_forward_in_time: str = "",
+    main_data_extract: bool = False,
 ) -> None:
     """
     Generate the "generic" C main() function for all simulation codes in the BHaH infrastructure.
@@ -393,6 +402,7 @@ def register_CFunction_main_c(
         pre_diagnostics,
         pre_MoL_step_forward_in_time,
         post_MoL_step_forward_in_time,
+        main_data_extract
     )
 
     # Step 4: Register the CFunction.

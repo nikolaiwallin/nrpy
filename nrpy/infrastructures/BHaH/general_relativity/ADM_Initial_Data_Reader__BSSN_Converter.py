@@ -38,6 +38,7 @@ def register_CFunction_exact_ADM_ID_function(
     BU: List[sp.Expr],
     gammaDD: List[List[sp.Expr]],
     KDD: List[List[sp.Expr]],
+    T4UU: List[List[sp.Expr]]=0,
 ) -> None:
     """
     Register C function for exact ADM initial data of a given ID type.
@@ -93,6 +94,13 @@ def register_CFunction_exact_ADM_ID_function(
             list_of_output_varnames += [f"initial_data->gammaSphorCartDD{i}{j}"]
             list_of_output_exprs += [KDD[i][j]]
             list_of_output_varnames += [f"initial_data->KSphorCartDD{i}{j}"]
+    
+    if IDtype == "BrillLindquistHawking":
+        for mu in range(4):
+            for nu in range(mu,4):
+                list_of_output_exprs += [T4UU[mu][nu]]
+                list_of_output_varnames += [f"initial_data->T4SphorCartUU{mu}{nu}"]
+                
 
     # Sort the outputs before calling outputC()
     list_of_output_varnames, list_of_output_exprs = (

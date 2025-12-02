@@ -24,6 +24,7 @@ from nrpy.infrastructures import BHaH
 def register_CFunction_bhahaha_find_horizons(
     CoordSystem: str,
     max_horizons: int,
+    main_data_extract: bool = False,
 ) -> Union[None, pcg.NRPyEnv_type]:
     """
     Register the C function for general-purpose 3D Lagrange interpolation.
@@ -629,10 +630,10 @@ and result updates for multiple horizons.
 @return - None (`void`).
 """
 
-    cfunc_type = "void"
+    cfunc_type = "void" 
     name = "bhahaha_find_horizons"
     params = (
-        """commondata_struct *restrict commondata, griddata_struct *restrict griddata"""
+        f"""commondata_struct *restrict commondata, griddata_struct *restrict griddata {", REAL AH_data[]" if main_data_extract else ""}"""
     )
 
     body = r"""
@@ -641,7 +642,6 @@ and result updates for multiple horizons.
   if (max_num_horizons <= 0) {
     return; // END IF: no horizons
   }
-
   struct timeval start_time_total, iter_time_tracker;
   gettimeofday(&start_time_total, NULL);
 
@@ -907,6 +907,30 @@ and result updates for multiple horizons.
         current_horizon_params->use_fixed_radius_guess_on_full_sphere = 1;
         current_horizon_params->t_m1 = -1.0; // Mark as not found for extrapolation logic.
       } // END ELSE: solver failed
+  """
+    if (main_data_extract):
+        body += r"""
+        AH_data[0] = diags_local.Theta_Linf_times_M;
+        AH_data[1] = diags_local.Theta_L2_times_M;
+        AH_data[2] = diags_local.area;
+        AH_data[3] = diags_local.x_centroid_wrt_coord_origin;
+        AH_data[4] = diags_local.y_centroid_wrt_coord_origin;
+        AH_data[5] = diags_local.z_centroid_wrt_coord_origin;
+        AH_data[6] = diags_local.min_coord_radius_wrt_centroid;
+        AH_data[7] = diags_local.max_coord_radius_wrt_centroid;
+        AH_data[8] = diags_local.mean_coord_radius_wrt_centroid;
+        AH_data[9] = diags_local.xy_plane_circumference;
+        AH_data[10] = diags_local.xz_plane_circumference;
+        AH_data[11] = diags_local.yz_plane_circumference;
+        AH_data[12] = diags_local.spin_a_x_from_xz_over_yz_prop_circumfs;
+        AH_data[13] = diags_local.spin_a_x_from_xy_over_yz_prop_circumfs;
+        AH_data[14] = diags_local.spin_a_y_from_yz_over_xz_prop_circumfs;
+        AH_data[15] = diags_local.spin_a_y_from_xy_over_xz_prop_circumfs;
+        AH_data[16] = diags_local.spin_a_z_from_xz_over_xy_prop_circumfs;
+        AH_data[17] = diags_local.spin_a_z_from_yz_over_xy_prop_circumfs;
+    """
+  
+    body += r"""
     } else { // Skipped solve (due to no input_metric_data or Nr_external_input == 0)
       // STEP 7.f: If solve was skipped, set flags for next time.
       if (commondata->bah_verbosity_level > 0 && current_horizon_params->Nr_external_input == 0) {
@@ -934,6 +958,7 @@ and result updates for multiple horizons.
     printf("NRPy_BHaHAHA total elapsed time (Iter %d): %.6f s\n", commondata->nn, timeval_to_seconds(start_time_total, end_time_total));
   } // END IF: verbosity for total time print
   """
+
     cfc.register_CFunction(
         subdirectory="",
         includes=includes,

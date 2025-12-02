@@ -38,12 +38,18 @@ class InitialData_Cartesian:
         self.alpha = sp.sympify(0)
         self.betaU = ixp.zerorank1()
         self.BU = ixp.zerorank1()
+        if (IDtype == "BrillLindquistHawking"):
+            self.T4UU = ixp.zerorank2(dimension=4)
 
         self.x, self.y, self.z = sp.symbols("x y z", real=True)
 
         if IDtype == "BrillLindquist":
             ID_defines_gauge_quantities = False
             self.gammaDD, self.KDD = self.BrillLindquist()
+        elif IDtype == "BrillLindquistHawking":
+            ID_defines_gauge_quantities = False
+            self.gammaDD, self.KDD = self.BrillLindquist()
+            self.T4UU = self.Hawking()
         else:
             raise ValueError(f"IDtype = {IDtype} is not supported.")
 
@@ -108,6 +114,15 @@ class InitialData_Cartesian:
         return gammaDD, KDD
     # fmt: on
 
+    def Hawking(self) -> List[List[sp.Expr]]:
+        """
+        Set the initial fixing for T_{mu nu}
+
+        :return: T4munu
+        """
+        T4UU = ixp.zerorank2(dimension=4)
+        T4UU[0][0] = sp.sympify(0.0) #Place holder for better value
+        return T4UU
 
 if __name__ == "__main__":
     import doctest

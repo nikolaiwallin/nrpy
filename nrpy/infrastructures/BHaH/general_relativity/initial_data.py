@@ -64,15 +64,28 @@ def register_CFunction_initial_data(
         else:
             ID = InitialData_Spherical(IDtype=IDtype)
 
-        BHaH.general_relativity.ADM_Initial_Data_Reader__BSSN_Converter.register_CFunction_exact_ADM_ID_function(
-            IDCoordSystem,
-            IDtype,
-            ID.alpha,
-            ID.betaU,
-            ID.BU,
-            ID.gammaDD,
-            ID.KDD,
-        )
+        if enable_T4munu:
+            BHaH.general_relativity.ADM_Initial_Data_Reader__BSSN_Converter.register_CFunction_exact_ADM_ID_function(
+                IDCoordSystem,
+                IDtype,
+                ID.alpha,
+                ID.betaU,
+                ID.BU,
+                ID.gammaDD,
+                ID.KDD,
+                ID.T4UU,
+            )
+        else:
+            BHaH.general_relativity.ADM_Initial_Data_Reader__BSSN_Converter.register_CFunction_exact_ADM_ID_function(
+                IDCoordSystem,
+                IDtype,
+                ID.alpha,
+                ID.betaU,
+                ID.BU,
+                ID.gammaDD,
+                ID.KDD,
+            )
+
     except (ValueError, RuntimeError):
         print(
             f"Warning: {IDtype} does not correspond to an implemented exact initial data type."

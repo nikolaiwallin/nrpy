@@ -37,6 +37,7 @@ def _register_CFunction_diagnostics(  # pylint: disable=unused-argument
     enable_free_auxevol: bool = True,
     enable_psi4_diagnostics: bool = False,
     enable_bhahaha: bool = False,
+    main_data_extract: bool = False,
 ) -> Union[None, pcg.NRPyEnv_type]:
     """
     Construct and register a C function that drives all scheduled diagnostics.
@@ -140,7 +141,7 @@ def _register_CFunction_diagnostics(  # pylint: disable=unused-argument
     cfunc_type = "void"
     name = "diagnostics"
     params = (
-        "commondata_struct *restrict commondata, griddata_struct *restrict griddata"
+        f"""commondata_struct *restrict commondata, griddata_struct *restrict griddata{", REAL AH_data[]" if main_data_extract else ""}"""
     )
     if parallelization == "cuda":
         params = "commondata_struct *restrict commondata, griddata_struct *restrict griddata_device, griddata_struct *restrict griddata"
@@ -159,7 +160,7 @@ def _register_CFunction_diagnostics(  # pylint: disable=unused-argument
     //   MoL_free_intermediate_stage_gfs(&griddata[grid].gridfuncs);
 
     {"// Find apparent horizon(s)." if enable_bhahaha else ""}
-    {"bhahaha_find_horizons(commondata, griddata);" + newline if enable_bhahaha else ""}
+    {f"bhahaha_find_horizons(commondata, griddata{", AH_data" if main_data_extract else ""});" + newline if enable_bhahaha else ""}
 
     // Allocate temporary storage for diagnostic_gfs.
     REAL *diagnostic_gfs[MAXNUMGRIDS];
@@ -237,6 +238,7 @@ def register_all_diagnostics(
     enable_free_auxevol: bool = True,
     enable_psi4_diagnostics: bool = False,
     enable_bhahaha: bool = False,
+    main_data_extract: bool = False
 ) -> None:
     """
     Register and stage all diagnostics-related C code and helper headers.
@@ -281,6 +283,7 @@ def register_all_diagnostics(
         enable_free_auxevol=enable_free_auxevol,
         enable_psi4_diagnostics=enable_psi4_diagnostics,
         enable_bhahaha=enable_bhahaha,
+        main_data_extract=main_data_extract,
     )
     if enable_nearest_diagnostics:
         for CoordSystem in set_of_CoordSystems:
