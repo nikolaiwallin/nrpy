@@ -148,7 +148,8 @@ void set_initial_data(commondata_struct *restrict commondata, griddata_struct *r
 
 #ifdef __CUDACC__
   //Retrieve commondata
-  gpuErrchk( cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost) );
+  cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
+  cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
   //Free device side copies of commondata and griddata
   cudaFree(d_commondata);
   cudaFree(d_griddata);

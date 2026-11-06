@@ -1194,13 +1194,17 @@ void set_outer_pts(commondata_struct *restrict commondata, const params_struct *
 
 #ifdef __CUDACC__
   bc_struct *d_bcstruct = NULL;
-  gpuErrchk( cudaMalloc((void**)&d_bcstruct, sizeof(bc_struct)) );
-  gpuErrchk( cudaMemcpy(d_bcstruct, bcstruct, sizeof(bc_struct), cudaMemcpyHostToDevice) );
+  cudaMalloc((void**)&d_bcstruct, sizeof(bc_struct));
+  cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
+  cudaMemcpy(d_bcstruct, bcstruct, sizeof(bc_struct), cudaMemcpyHostToDevice);
+  cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
   
   params_struct *d_bc_params = NULL;
   if (bc_params != NULL) {
-    gpuErrchk( cudaMalloc((void**)&d_bc_params, sizeof(params_struct )) );
-    gpuErrchk( cudaMemcpy(d_bc_params, bc_params, sizeof(params_struct ), cudaMemcpyHostToDevice) );
+    cudaMalloc((void**)&d_bc_params, sizeof(params_struct ));
+    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
+    cudaMemcpy(d_bc_params, bc_params, sizeof(params_struct ), cudaMemcpyHostToDevice);
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
   }
 #endif
 
@@ -1212,7 +1216,8 @@ void set_outer_pts(commondata_struct *restrict commondata, const params_struct *
     void *Args[] = {(void *)&commondata, (void *)&d_bc_params, (void *)&xx[0], (void *)&xx[1], (void *)&xx[2], &d_bcstruct};
     COOPERATIVE_KERNEL(count_num_inner_pts, Args); 
 
-    gpuErrchk( cudaMemcpy(bcstruct, d_bcstruct, sizeof(bc_struct), cudaMemcpyDeviceToHost) );
+    cudaMemcpy(bcstruct, d_bcstruct, sizeof(bc_struct), cudaMemcpyDeviceToHost);
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
 #else 
     count_num_inner_pts(commondata, bc_params, xx, bcstruct);
 #endif
@@ -1220,8 +1225,10 @@ void set_outer_pts(commondata_struct *restrict commondata, const params_struct *
 
     // Next allocate memory for inner_boundary_points:
 #ifdef __CUDACC__
-    gpuErrchk( cudaMalloc((void**)&bcstruct->inner_bc_array, sizeof(innerpt_bc_struct) * num_inner) );
-    gpuErrchk( cudaMemcpy(d_bcstruct, bcstruct, sizeof(bc_struct), cudaMemcpyHostToDevice) );
+    cudaMalloc((void**)&bcstruct->inner_bc_array, sizeof(innerpt_bc_struct) * num_inner);
+    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
+    cudaMemcpy(d_bcstruct, bcstruct, sizeof(bc_struct), cudaMemcpyHostToDevice);
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
 #else
     bcstruct->inner_bc_array = (innerpt_bc_struct *)malloc(sizeof(innerpt_bc_struct) * num_inner);
 #endif
@@ -1338,10 +1345,12 @@ void set_outer_pts(commondata_struct *restrict commondata, const params_struct *
   } // END LOOP over ghostzones
 
 #ifdef __CUDACC__
-    gpuErrchk( cudaMemcpy(d_bcstruct, bcstruct, sizeof(bc_struct), cudaMemcpyHostToDevice) );
+    cudaMemcpy(d_bcstruct, bcstruct, sizeof(bc_struct), cudaMemcpyHostToDevice);
+    
   
     set_outer_pts<<<1, 64>>>(commondata, d_bc_params, xx[0], xx[1], xx[2], d_bcstruct);
-    gpuErrchk( cudaMemcpy(bcstruct, d_bcstruct, sizeof(bc_struct), cudaMemcpyDeviceToHost) );
+    cudaMemcpy(bcstruct, d_bcstruct, sizeof(bc_struct), cudaMemcpyDeviceToHost);
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
     cudaFree(d_bcstruct);
 #else
     set_outer_pts(commondata, bc_params, xx, bcstruct);

@@ -218,7 +218,8 @@ void bah_numgrid__evol_set_up_kernel(commondata_struct *restrict commondata, gri
 
   // Step 7: Allocate reference-metric precompute lookup arrays.
 #ifdef __CUDACC__
-  gpuErrchk( cudaMalloc((void**)&(griddata[grid].rfmstruct),sizeof(rfm_struct)) );
+  cudaMalloc((void**)&(griddata[grid].rfmstruct),sizeof(rfm_struct));
+  cudaCheckErrors(cudaMalloc, "cudaMalloc failure"); 
 #else 
   griddata[grid].rfmstruct = (rfm_struct *)malloc(sizeof(rfm_struct));
 #endif
@@ -260,7 +261,8 @@ void bah_numgrid__evol_set_up_kernel(commondata_struct *restrict commondata, gri
     
 #ifdef __CUDACC__
     bah_bcstruct_set_up(d_commondata, &griddata->params, griddata[grid].xx, &griddata[grid].bcstruct);
-    gpuErrchk( cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost) );
+    cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
 #else
     bah_bcstruct_set_up(commondata, &griddata->params, griddata[grid].xx, &griddata[grid].bcstruct);
 #endif

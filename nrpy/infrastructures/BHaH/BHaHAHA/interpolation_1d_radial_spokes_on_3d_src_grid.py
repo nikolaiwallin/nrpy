@@ -163,7 +163,7 @@ __device__
       {
         // Ensure the stencil is within valid grid bounds.
         if (( idx_center0 - NinterpGHOSTS < 0) || (idx_center0 + NinterpGHOSTS >= src_Nxx_plus_2NGHOSTS0)) {
-#ifdef DEBUG
+#if defined(DEBUG) && !defined(__CUDACC__)
           // Provide detailed error messages in debug mode for easier troubleshooting.
           fprintf(stderr, "ERROR: Interpolation stencil exceeds grid boundaries for r_dst = %.6f. itheta, iphi = %d %d.\n", r_dst, itheta, iphi);
           fprintf(stderr, "Grid bounds along radial direction: [0, %d], idx_center = %d, stencil indices: [%d, %d]\n", src_Nxx_plus_2NGHOSTS0 - 1,
@@ -191,7 +191,7 @@ __device__
           #endif
         } // END IF stencil in bounds
         
-#ifdef DEBUG
+#if defined(DEBUG) && !defined(__CUDACC__)
         // Verify that the central index is the closest grid point to the destination radius.
         if (fabs(interp_src_r_theta_phi[0][idx_center0] - r_dst) > commondata->interp_src_dxx0 * 0.5) {
           fprintf(stderr, "ERROR: Radial center index too far from destination point!\n");
@@ -225,6 +225,14 @@ __device__
     postfunc = r"""#pragma GCC reset_options // Reset compiler optimizations after the function
 
 #ifdef STANDALONE
+
+#ifdef __CUDACC__
+__global__
+#endif
+void bah_interpolation_1d_radial_spokes_on_3d_src_grid_kernel(const params_struct *restrict params, commondata_struct *restrict commondata,
+                                                        const REAL *restrict dst_radii_aka_src_h_gf, REAL *restrict dst_interp_gfs) {
+  bah_interpolation_1d_radial_spokes_on_3d_src_grid(params, commondata, dst_radii_aka_src_h_gf, dst_interp_gfs);
+}
 
 #include <omp.h>
 
@@ -312,8 +320,13 @@ int initialize_src_gf(const int src_Nxx_plus_2NGHOSTS[3], REAL *src_r_theta_phi[
  */
 int main() {
   int return_code = EXIT_SUCCESS;
+  const int INTERP_ORDER = (2 * NinterpGHOSTS + 1);
   REAL *src_r_theta_phi[3] = {NULL, NULL, NULL};
   REAL *src_gf = NULL, *dst_radii = NULL, *dst_interp_gfs = NULL;
+#ifdef __CUDACC__
+  REAL *d_src_r_theta_phi[3] = {NULL, NULL, NULL};
+  REAL *d_src_gf = NULL, *d_dst_radii = NULL, *d_dst_interp_gfs = NULL;
+#endif
   int N_r_arr[NUM_RESOLUTIONS] = {16, 32, 64};
   REAL h_arr[NUM_RESOLUTIONS], error_L2_norm[NUM_RESOLUTIONS];
   const int N_theta = 32, N_phi = 64;
@@ -353,12 +366,31 @@ int main() {
     commondata_struct commondata = {.interp_src_Nxx0 = N_r,
                                     .interp_src_Nxx_plus_2NGHOSTS0 = src_Nxx_plus_2NGHOSTS[0],
                                     .interp_src_Nxx_plus_2NGHOSTS1 = src_Nxx_plus_2NGHOSTS[1],
-                                    .interp_src_Nxx_plus_2NGHOSTS2 = src_Nxx_plus_2NGHOSTS[2],
-                                    .interp_src_invdxx0 = 1.0 / src_dxx[0],
-                                    .interp_src_dxx0 = src_dxx[0],
-                                    .interp_src_gfs = src_gf};
-    for (int i = 0; i < 3; i++)
+                                    .interp_src_Nxx_plus_2NGHOSTS2 = src_Nxx_plus_2NGHOSTS[2]};
+    commondata.interp_src_invdxx0 = 1.0 / src_dxx[0];
+    commondata.interp_src_dxx0 = src_dxx[0];
+#ifdef __CUDACC__
+    cudaMalloc((void**)&(d_src_gf), sizeof(REAL) * NUM_INTERP_SRC_GFS * total_src_pts);
+    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
+    cudaMemcpy(d_src_gf,src_gf, sizeof(REAL) * NUM_INTERP_SRC_GFS * total_src_pts, cudaMemcpyHostToDevice) );
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    commondata.interp_src_gfs = d_src_gf;
+#else
+    commondata.interp_src_gfs = src_gf;
+#endif
+
+    for (int i = 0; i < 3; i++) {
+      #ifdef __CUDACC__
+      cudaMalloc((void**)&(d_src_r_theta_phi[i]),sizeof(REAL) * src_Nxx_plus_2NGHOSTS[i]);
+      cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
+      cudaMemcpy(d_src_r_theta_phi[i], src_r_theta_phi[i], sizeof(REAL) * src_Nxx_plus_2NGHOSTS[i],cudaMemcpyHostToDevice);
+      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+      commondata.interp_src_gfs = d_src_gf;
+      commondata.interp_src_r_theta_phi[i] = d_src_r_theta_phi[i];
+      #else
       commondata.interp_src_r_theta_phi[i] = src_r_theta_phi[i];
+      #endif
+    }
 
     const size_t total_dst_pts = (size_t)params.Nxx_plus_2NGHOSTS0 * params.Nxx_plus_2NGHOSTS1 * params.Nxx_plus_2NGHOSTS2;
     dst_radii = (REAL *)malloc(sizeof(REAL) * total_dst_pts);
@@ -368,6 +400,12 @@ int main() {
       return_code = EXIT_FAILURE;
       goto cleanup;
     }
+    #ifdef __CUDACC__
+    cudaMalloc((void**)&d_dst_radii, sizeof(REAL) * total_dst_pts);
+    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
+    cudaMalloc((void**)&d_dst_interp_gfs, sizeof(REAL) * NUM_INTERP_SRC_GFS * total_dst_pts);
+    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
+    #endif
 
     const REAL r_min_safe = src_r_theta_phi[0][NinterpGHOSTS] + 1e-6;
     const REAL r_max_safe = src_r_theta_phi[0][src_Nxx_plus_2NGHOSTS[0] - NinterpGHOSTS - 1] - 1e-6;
@@ -384,11 +422,52 @@ int main() {
 #endif
     int error_code = BHAHAHA_SUCCESS;
     const int NUM_TIMES = 90000;
+
+#ifdef __CUDACC__
+    cudaMemcpy(d_dst_radii, dst_radii, sizeof(REAL) * total_dst_pts,cudaMemcpyHostToDevice);
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    cudaMemcpy(d_dst_interp_gfs, dst_interp_gfs, sizeof(REAL) * NUM_INTERP_SRC_GFS * total_dst_pts, cudaMemcpyHostToDevice);
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    commondata_struct *d_commondata = NULL;
+    params_struct *d_params = NULL;
+    cudaMalloc((void**)&d_commondata, sizeof(commondata_struct));
+    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
+    cudaMalloc((void**)&d_params, sizeof(params_struct));
+    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
+    cudaMemcpy(d_commondata, &commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    cudaMemcpy(d_params, &params, sizeof(params_struct), cudaMemcpyHostToDevice);
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+#endif
+
     for (int n = 0; n < NUM_TIMES; n++) {
-      error_code = bah_interpolation_1d_radial_spokes_on_3d_src_grid(&params, &commondata, dst_radii, dst_interp_gfs);
+#ifdef __CUDACC__
+      void *Args[] = {&d_params, &d_commondata, &d_dst_radii, &d_dst_interp_gfs};
+      int dev = 0;
+      cudaDeviceProp deviceProp;
+      cudaGetDeviceProperties(&deviceProp, dev);
+      int gridDim = deviceProp.multiProcessorCount;
+      cudaLaunchCooperativeKernel((void *)bah_interpolation_1d_radial_spokes_on_3d_src_grid_kernel, gridDim, THREADSPERBLOCK, Args);
+      cudaDeviceSynchronize();
+      
+#else
+      bah_interpolation_1d_radial_spokes_on_3d_src_grid_kernel(&params, &commondata, dst_radii, dst_interp_gfs);
+#endif
+      int error_code = commondata.error_flag;
       if (error_code != BHAHAHA_SUCCESS)
         break;
     }
+#ifdef __CUDACC__
+      cudaMemcpy(&commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
+      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+      cudaMemcpy(&params, d_params, sizeof(params_struct), cudaMemcpyDeviceToHost);
+      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+      cudaMemcpy(dst_radii,d_dst_radii, sizeof(REAL) * total_dst_pts,cudaMemcpyDeviceToHost);
+      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+      cudaMemcpy(dst_interp_gfs, d_dst_interp_gfs, sizeof(REAL) * NUM_INTERP_SRC_GFS * total_dst_pts, cudaMemcpyDeviceToHost);
+      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+#endif
+ 
 #ifdef _OPENMP
     double end_time = omp_get_wtime();
 #endif
@@ -439,7 +518,6 @@ int main() {
     dst_interp_gfs = NULL;
   }
 
-  const int INTERP_ORDER = (2 * NinterpGHOSTS + 1);
   printf("\n--- Convergence Results ---\n");
   for (int res = 1; res < NUM_RESOLUTIONS; res++) {
     REAL observed_order = log(error_L2_norm[res - 1] / error_L2_norm[res]) / log(h_arr[res - 1] / h_arr[res]);
@@ -457,6 +535,15 @@ cleanup:
   free(src_gf);
   free(dst_radii);
   free(dst_interp_gfs);
+
+  #ifdef __CUDACC__
+  for (int i = 0; i < 3; i++)
+    cudaFree(d_src_r_theta_phi[i]);
+  cudaFree(d_src_gf);
+  cudaFree(d_dst_radii);
+  cudaFree(d_dst_interp_gfs);
+  #endif
+
   return return_code;
 } // END FUNCTION: main
 

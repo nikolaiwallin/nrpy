@@ -227,8 +227,12 @@ MAYBE_UNUSED
 char {CPname}[{CPsize}]; {comment}
 {{
 #ifdef __CUDACC__
-  for (int i = 0; params->CoordSystemName[i] != '\0' && i<100; i++)
-    CoordSystemName[i] = params->CoordSystemName[i];
+  for (int i = 0; i<{CPsize}; i++) {{
+    {CPname}[i] = {struct}{pointer}{CPname}[i];
+    if ({struct}{pointer}{CPname}[i] == '\0') {{
+      break;
+    }}
+  }} 
 #else
   // Safely copy string with snprintf, which guarantees null termination
   snprintf({CPname}, sizeof({CPname}), "%s", {struct}{pointer}{CPname});

@@ -228,7 +228,7 @@ __device__
       // Verify that the interpolation stencil does not exceed grid boundaries.
       if ((idx_center_th - n_interp_ghosts < 0) || (idx_center_th + n_interp_ghosts >= src_Nxx_plus_2NGHOSTS1) ||
           (idx_center_ph - n_interp_ghosts < 0) || (idx_center_ph + n_interp_ghosts >= src_Nxx_plus_2NGHOSTS2)) {
-#ifdef DEBUG
+#if defined(DEBUG) && !defined(__CUDAC__)
         // Provide detailed error messages in debug mode for easier troubleshooting.
         fprintf(stderr, "ERROR: Interpolation stencil exceeds grid boundaries. %d %d %d %d\n", (idx_center_th - n_interp_ghosts < 0),
                 (idx_center_th + n_interp_ghosts >= src_Nxx_plus_2NGHOSTS1), (idx_center_ph - n_interp_ghosts < 0),
@@ -253,7 +253,7 @@ __device__
       } // END IF: Check stencil boundaries.
 
       // Additional sanity checks to ensure central index is correctly positioned.
-#ifdef DEBUG
+#if defined(DEBUG) && !defined(__CUDACC__)
     if (*error_flag == BHAHAHA_SUCCESS) {
         const REAL TOLERANCE = 1e-13; // Tolerance to account for floating-point precision.
         if (fabs(src_r_theta_phi[1][idx_center_th] - theta_dst) > src_dxx1 * (0.5 + TOLERANCE)) {
@@ -341,6 +341,30 @@ __device__
 #define NUM_INTERP_GFS 2
 #define NUM_RESOLUTIONS 3
 #define NUM_DST_PTS 40000000
+
+#ifdef __CUDACC__
+#define THREADSPERBLOCK 64
+#endif
+
+#ifdef __CUDACC__
+__global__ 
+void bah_interpolation_2d_general__uniform_src_grid_kernel(const int n_interp_ghosts, const REAL src_dxx0_val, const REAL src_dxx1_val,
+                                                        const int src_Nxx_plus_2NGHOSTS0, const int src_Nxx_plus_2NGHOSTS1,
+                                                        REAL *restrict d_src_x0x1_0, REAL *restrict d_src_x0x1_1, REAL *restrict d_src_x0x1_2, const REAL *restrict d_src_gf, const int num_dst_pts,
+                                                        const REAL d_dst_pts[][2], REAL *restrict d_dst_data, int *error_flag)
+#else
+void bah_interpolation_2d_general__uniform_src_grid_kernel(const int n_interp_ghosts, const REAL src_dxx0_val, const REAL src_dxx1_val,
+                                                        const int src_Nxx_plus_2NGHOSTS0, const int src_Nxx_plus_2NGHOSTS1,
+                                                        REAL *restrict d_src_x0x1[3], const REAL *restrict d_src_gf, const int num_dst_pts,
+                                                        const REAL d_dst_pts[][2], REAL *restrict d_dst_data, int *error_flag)
+#endif
+{
+#ifdef __CUDACC__
+  REAL *restrict d_src_x0x1[3] = {d_src_x0x1_0, d_src_x0x1_1, d_src_x0x1_2};
+#endif
+  bah_interpolation_2d_general__uniform_src_grid(n_interp_ghosts, src_dxx0_val, src_dxx1_val, src_Nxx_plus_2NGHOSTS0, src_Nxx_plus_2NGHOSTS1,
+                                                         d_src_x0x1, d_src_gf, num_dst_pts, d_dst_pts, d_dst_data, error_flag);
+}
 
 // Analytic functions.
 static inline REAL analytic_function1(REAL x0, REAL x1) { return sin(x0) * cos(x1); }
@@ -433,6 +457,13 @@ int main() {
   REAL *src_gf[NUM_INTERP_GFS] = {NULL};
   REAL *dst_data[NUM_INTERP_GFS] = {NULL};
 
+#ifdef __CUDACC__
+  REAL(*d_dst_pts)[2] = NULL;
+  REAL *d_src_x0x1[3] = {NULL, NULL, NULL};
+  REAL *d_src_gf[NUM_INTERP_GFS] = {NULL};
+  REAL *d_dst_data[NUM_INTERP_GFS] = {NULL};
+#endif
+
   const int n_interp_ghosts = 3;
   const int INTERP_ORDER = 2 * n_interp_ghosts + 1;
 
@@ -484,12 +515,18 @@ int main() {
     } // END LOOP: for dst_pt over destination points and exact values
     for (int gf = 0; gf < NUM_INTERP_GFS; gf++) {
       const size_t size = (size_t)src_Nxx_plus_2NGHOSTS0 * src_Nxx_plus_2NGHOSTS1;
+#ifdef __CUDACC__
+      cudaMalloc((void **)&d_src_gf[gf], (sizeof(REAL) * size));
+#endif
       src_gf[gf] = (REAL *)malloc(sizeof(REAL) * size);
       if (!src_gf[gf]) {
         fprintf(stderr, "malloc failed for src_gf.\n");
         return_code = EXIT_FAILURE;
         goto cleanup;
       } // END IF: source-gridfunction allocation failed
+#ifdef __CUDACC__
+      cudaMalloc((void **)&d_dst_data[gf], sizeof(REAL) * NUM_DST_PTS);
+#endif
       dst_data[gf] = (REAL *)malloc(sizeof(REAL) * NUM_DST_PTS);
       if (!dst_data[gf]) {
         fprintf(stderr, "malloc failed for dst_data.\n");
@@ -504,9 +541,41 @@ int main() {
     double start_time = omp_get_wtime();
 #endif
     for (int gf = 0; gf < NUM_INTERP_GFS; gf++) {
-      int error_code =
-          bah_interpolation_2d_general__uniform_src_grid(n_interp_ghosts, src_dxx0_val, src_dxx1_val, src_Nxx_plus_2NGHOSTS0, src_Nxx_plus_2NGHOSTS1,
-                                                         src_x0x1, src_gf[gf], NUM_DST_PTS, dst_pts, dst_data[gf]);
+#ifdef __CUDACC__
+      cudaMalloc((void **)&d_src_x0x1[1], sizeof(REAL) * src_Nxx_plus_2NGHOSTS0);
+      cudaMalloc((void **)&d_src_x0x1[2], sizeof(REAL) * src_Nxx_plus_2NGHOSTS1);
+      cudaMemcpy(d_src_x0x1[1], src_x0x1[1], sizeof(REAL) * src_Nxx_plus_2NGHOSTS0, cudaMemcpyHostToDevice);
+      cudaMemcpy(d_src_x0x1[2], src_x0x1[2], sizeof(REAL) * src_Nxx_plus_2NGHOSTS1, cudaMemcpyHostToDevice);
+
+      cudaMalloc((void **)&d_dst_pts, sizeof(REAL) * NUM_DST_PTS * 2);
+      cudaMemcpy(d_dst_pts, dst_pts, sizeof(REAL) * NUM_DST_PTS * 2, cudaMemcpyHostToDevice);
+      
+      cudaMemcpy(d_dst_data[gf], dst_data[gf], sizeof(REAL) * NUM_DST_PTS, cudaMemcpyHostToDevice);
+  
+      const size_t size = (size_t)src_Nxx_plus_2NGHOSTS0 * src_Nxx_plus_2NGHOSTS1;
+      cudaMemcpy(d_src_gf[gf], src_gf[gf], (sizeof(REAL) * size), cudaMemcpyHostToDevice);
+#endif
+      int error_code = 0;
+#ifdef __CUDACC__
+      int *d_error_code = NULL;
+      cudaMalloc((void **)&d_error_code, sizeof(int));
+#endif
+#ifdef __CUDACC__
+      int num_dst_pts = NUM_DST_PTS;
+      void *Args[] = {(void *)&n_interp_ghosts, &src_dxx0_val, &src_dxx1_val, &src_Nxx_plus_2NGHOSTS0, &src_Nxx_plus_2NGHOSTS1,
+                                                         &d_src_x0x1[0], &d_src_x0x1[1], &d_src_x0x1[2], &d_src_gf[gf], &num_dst_pts, &d_dst_pts, &d_dst_data[gf], &d_error_code};
+      int dev = 0;
+      cudaDeviceProp deviceProp;
+      cudaGetDeviceProperties(&deviceProp, dev);
+      int gridDim = deviceProp.multiProcessorCount;
+      int sharesize = sizeof(REAL) * (INTERP_ORDER + (THREADSPERBLOCK * 4) * INTERP_ORDER + THREADSPERBLOCK * INTERP_ORDER * INTERP_ORDER);
+      cudaLaunchCooperativeKernel((void *)bah_interpolation_2d_general__uniform_src_grid_kernel, gridDim, THREADSPERBLOCK, Args, sharesize);
+      cudaDeviceSynchronize();
+      cudaMemcpy(dst_data[gf], d_dst_data[gf], sizeof(REAL) * NUM_DST_PTS, cudaMemcpyDeviceToHost);
+#else
+      bah_interpolation_2d_general__uniform_src_grid_kernel(n_interp_ghosts, src_dxx0_val, src_dxx1_val, src_Nxx_plus_2NGHOSTS0, src_Nxx_plus_2NGHOSTS1,
+                                                         src_x0x1, src_gf[gf], NUM_DST_PTS, dst_pts, dst_data[gf], &error_code);
+#endif
       if (error_code != BHAHAHA_SUCCESS) {
         fprintf(stderr, "Interpolation error code: %d for GF %d\n", error_code, gf + 1);
         return_code = error_code;

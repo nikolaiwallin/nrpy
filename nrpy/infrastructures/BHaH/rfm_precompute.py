@@ -447,7 +447,8 @@ def register_CFunctions_rfm_precompute(
             malloc_lines += "\n".join(f"""
 #ifdef __CUDACC__
 REAL* {m} = NULL;
-gpuErrchk( cudaMalloc((void**)&{m}, sizeof(REAL) * ({sz})) );
+cudaMalloc((void**)&{m}, sizeof(REAL) * ({sz}));
+cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
 tmp_rfmstruct->{m} = {m};
 #else
 BHAH_MALLOC__PtrMember(rfmstruct, {m}, sizeof(REAL) * ({sz}));
@@ -480,7 +481,7 @@ IFCUDARUN({{
             free_lines = """
 #ifdef __CUDACC__
   rfm_struct* tmp_rfmstruct = (rfm_struct *)malloc(sizeof(rfm_struct));
-  cudaMemcpy(tmp_rfmstruct, rfmstruct, sizeof(rfmstruct), cudaMemcpyDeviceToHost);
+  cudaMemcpy(tmp_rfmstruct, rfmstruct, sizeof(rfm_struct), cudaMemcpyDeviceToHost);
 #endif
 """
             free_lines += "\n".join(f"""

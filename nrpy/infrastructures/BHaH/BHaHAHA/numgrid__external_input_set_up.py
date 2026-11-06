@@ -446,13 +446,16 @@ This function performs the following steps:
 #ifdef __CUDACC__
   //Deep copy bhahaha_params_and_data & bhahaha_diagnostics
   bhahaha_params_and_data_struct *d_bhahaha_params_and_data = NULL;
-  gpuErrchk( cudaMalloc((void**)&d_bhahaha_params_and_data, sizeof(bhahaha_params_and_data_struct)) );
-  gpuErrchk( cudaMemcpy(d_bhahaha_params_and_data, commondata->bhahaha_params_and_data, sizeof(bhahaha_params_and_data_struct), cudaMemcpyHostToDevice) );
+  cudaMalloc((void**)&d_bhahaha_params_and_data, sizeof(bhahaha_params_and_data_struct));
+  cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
+  cudaMemcpy(d_bhahaha_params_and_data, commondata->bhahaha_params_and_data, sizeof(bhahaha_params_and_data_struct), cudaMemcpyHostToDevice);
+  cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
   commondata->bhahaha_params_and_data = d_bhahaha_params_and_data;
 
   bhahaha_diagnostics_struct *d_bhahaha_diagnostics = NULL;
   cudaMalloc((void**)&d_bhahaha_diagnostics, sizeof(bhahaha_diagnostics_struct));
   cudaMemcpy(d_bhahaha_diagnostics, commondata->bhahaha_diagnostics, sizeof(bhahaha_diagnostics_struct), cudaMemcpyHostToDevice);
+  cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
   commondata->bhahaha_diagnostics = d_bhahaha_diagnostics;
 #endif
 
@@ -460,6 +463,7 @@ This function performs the following steps:
 #ifdef __CUDACC__
   REAL *external_input_gfs = NULL;
   cudaMalloc((void**)&external_input_gfs, NUM_EXT_INPUT_CONFORMAL_GFS * total_elements_incl_gzs * sizeof(REAL));
+  cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
 #else
   REAL *restrict external_input_gfs = (REAL *)malloc(NUM_EXT_INPUT_CONFORMAL_GFS * total_elements_incl_gzs * sizeof(REAL));
 #endif
@@ -480,8 +484,11 @@ This function performs the following steps:
     // Step 3.a: Allocate memory for coordinate arrays in radial, theta, and phi directions.
 #ifdef __CUDACC__
     cudaMalloc((void**)&commondata->external_input_r_theta_phi[0], sizeof(REAL*) * Nxx_plus_2NGHOSTS0);
+    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
     cudaMalloc((void**)&commondata->external_input_r_theta_phi[1], sizeof(REAL*) * Nxx_plus_2NGHOSTS1);
+    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
     cudaMalloc((void**)&commondata->external_input_r_theta_phi[2], sizeof(REAL*) * Nxx_plus_2NGHOSTS2);
+    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
 #else
     commondata->external_input_r_theta_phi[0] = (REAL *)malloc(sizeof(REAL) * Nxx_plus_2NGHOSTS0);
     commondata->external_input_r_theta_phi[1] = (REAL *)malloc(sizeof(REAL) * Nxx_plus_2NGHOSTS1);
@@ -500,8 +507,8 @@ This function performs the following steps:
 #ifdef __CUDACC__
   //Allocate and initialize device side copy of commondata
   commondata_struct *d_commondata = NULL;
-  gpuErrchk( cudaMalloc((void**)&d_commondata, sizeof(commondata_struct)) );
-  gpuErrchk( cudaMemcpy(d_commondata, commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice) );
+  cudaMalloc((void**)&d_commondata, sizeof(commondata_struct));
+  cudaMemcpy(d_commondata, commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
 #endif
 
   {
@@ -510,7 +517,8 @@ This function performs the following steps:
     COOPERATIVE_KERNEL(initialize_transform_and_rescale, Args);
 
     //Copy changes to host side commondata  
-    gpuErrchk(cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost));
+    cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
 #else
     initialize_transform_and_rescale(commondata);
 #endif
@@ -531,7 +539,8 @@ This function performs the following steps:
     commondata->bcstruct_Nxx_plus_2NGHOSTS2 = Nxx_plus_2NGHOSTS2;
 #ifdef __CUDACC__
     // Update device side commondata
-    gpuErrchk( cudaMemcpy(d_commondata, commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice) );
+    cudaMemcpy(d_commondata, commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
 #endif
 
     // Step 5.b: Initialize the boundary condition structure for external input data.
@@ -542,7 +551,8 @@ This function performs the following steps:
     bah_bcstruct_set_up(commondata, NULL, commondata->external_input_r_theta_phi, &external_input_bcstruct);
 #endif
 #ifdef __CUDACC__
-    gpuErrchk( cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost) );
+    cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
 #endif
     if (commondata->error_flag != BHAHAHA_SUCCESS)
       return;
@@ -557,7 +567,7 @@ This function performs the following steps:
     {
 #ifdef __CUDACC__
       //Set external source grid function parity in device constant memory
-      gpuErrchk( cudaMemcpyToSymbol(c_external_input_gf_parity, &external_input_gf_parity, 14*sizeof(int8_t)) );
+      cudaMemcpyToSymbol(c_external_input_gf_parity, &external_input_gf_parity, 14*sizeof(int8_t));
 
       void *Args[] = {&d_commondata, &d_external_input_bcstruct};
       COOPERATIVE_KERNEL(apply_bcs_external_src, Args);
@@ -569,6 +579,7 @@ This function performs the following steps:
     // Step 5.d: Free allocated memory for boundary condition structures to prevent memory leaks.
 #ifdef __CUDACC__
     cudaFree(d_external_input_bcstruct);
+    cudaCheckErrors(cudaFree, "cudaFree failure");
 #endif
     FREE(external_input_bcstruct.inner_bc_array);
 for (int ng = 0; ng < NGHOSTS * 3; ng++)
@@ -577,7 +588,9 @@ for (int ng = 0; ng < NGHOSTS * 3; ng++)
 
 #ifdef __CUDACC__
   cudaFree(d_commondata);
+  cudaCheckErrors(cudaFree, "cudaFree failure");
   cudaFree(d_external_input_gfs_no_gzs);
+  cudaCheckErrors(cudaFree, "cudaFree failure");
 #endif
   return;
 """
