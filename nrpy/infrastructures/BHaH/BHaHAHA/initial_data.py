@@ -140,8 +140,13 @@ void set_initial_data(commondata_struct *restrict commondata, griddata_struct *r
 #ifdef __CUDACC__
   void *Args[] = {&d_commondata, &d_griddata, (void *)&coarse_to_fine, &dst_pts};
   int INTERP_ORDER = (2 * NGHOSTS + 1);
-  int sharesize = sizeof(REAL)*(INTERP_ORDER + (THREADSPERBLOCK*4)*INTERP_ORDER + THREADSPERBLOCK*INTERP_ORDER*INTERP_ORDER);
-  COOPERATIVE_KERNEL(set_initial_data, Args, sharesize)
+  int sharesize;
+  int threadsperblock = THREADSPERBLOCK << 1;
+  do {
+    threadsperblock = threadsperblock >> 1;
+    sharesize = sizeof(REAL)*(INTERP_ORDER + (THREADSPERBLOCK*4)*INTERP_ORDER + THREADSPERBLOCK*INTERP_ORDER*INTERP_ORDER);
+  } while ( sharesize > 48000 );
+  COOPERATIVE_KERNEL(set_initial_data, Args, threadsperblock, sharesize)
 #else
   set_initial_data(commondata, griddata, coarse_to_fine, dst_pts); 
 #endif

@@ -339,8 +339,13 @@ to identify the apparent horizon with progressively refined grid resolutions.
     {
 #ifdef __CUDACC__
       void *Args[] ={ &d_commondata, &d_griddata, &resolution};
-      int sharesize = 8*THREADSPERBLOCK*sizeof(REAL);
-      COOPERATIVE_KERNEL(bah_main_simulation_loop, Args, sharesize);
+      int sharesize;
+      int threadsperblock = THREADSPERBLOCK << 1;
+      do {
+        threadsperblock = threadsperblock >> 1;
+        sharesize = 8*threadsperblock*sizeof(REAL);
+      } while ( sharesize > 48000);
+      COOPERATIVE_KERNEL(bah_main_simulation_loop, Args, threadsperblock, sharesize);
 #else
       bah_main_simulation_loop(&commondata, griddata, resolution);
 #endif
@@ -423,8 +428,13 @@ to identify the apparent horizon with progressively refined grid resolutions.
         cudaMemcpy(d_griddata, griddata, sizeof(griddata_struct), cudaMemcpyHostToDevice);
         cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
         void *Args[] = {&d_commondata, &d_griddata, &compute_proper_circumferences};
-        int sharesize = sizeof(REAL)*(INTERP_ORDER + (THREADSPERBLOCK*4)*INTERP_ORDER + THREADSPERBLOCK*INTERP_ORDER*INTERP_ORDER) + sizeof(REAL)*INTERP_ORDER;
-        COOPERATIVE_KERNEL(bah_diagnostics_full, Args, sharesize);
+        int sharesize;
+        int threadsperblock = THREADSPERBLOCK << 1;
+        do {
+          threadsperblock = threadsperblock >> 1;
+          sharesize = sizeof(REAL)*(INTERP_ORDER + (THREADSPERBLOCK*4)*INTERP_ORDER + THREADSPERBLOCK*INTERP_ORDER*INTERP_ORDER) + sizeof(REAL)*INTERP_ORDER;
+        } while ( sharesize > 48000);
+        COOPERATIVE_KERNEL(bah_diagnostics_full, Args, threadsperblock, sharesize);
         cudaMemcpy(&commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
         cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
         cudaMemcpy(griddata, d_griddata, sizeof(griddata_struct), cudaMemcpyDeviceToHost);

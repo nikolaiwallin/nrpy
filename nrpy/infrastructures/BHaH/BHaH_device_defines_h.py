@@ -89,22 +89,21 @@ int bhahaha_gpu_set_error(int *error_flag, int code)
 
 #define THREADSPERBLOCK 64
 #define COOPERATIVE_KERNEL_NO_SHARED_MEMORY(kernel_name, kernel_args)                                                                               \
-    cudaLaunchCooperativeKernel((void*)(kernel_name), gridDim, blockDim, (kernel_args));                                                            \
+    cudaLaunchCooperativeKernel((void*)(kernel_name), gridDim, THREADSPERBLOCK, (kernel_args));                                                            \
     cudaCheckErrors(cudaKernel, "(kernel_name)");
 
-#define COOPERATIVE_KERNEL_SHARED_MEMORY(kernel_name, kernel_args, kernel_sharesize)                                                                \
-    cudaLaunchCooperativeKernel((void*)(kernel_name), gridDim, blockDim, (kernel_args), (kernel_sharesize));                           \
+#define COOPERATIVE_KERNEL_SHARED_MEMORY(kernel_name, kernel_args, kernel_threads_per_block, kernel_sharesize)                                                                \
+    cudaLaunchCooperativeKernel((void*)(kernel_name), gridDim, (kernel_threads_per_block), (kernel_args), (kernel_sharesize));                           \
     cudaCheckErrors(cudaKernel, "(kernel_name)");
 
-#define GET_COOPERATIVE_KERNEL(_1, _2, NAME, ...) NAME
+#define GET_COOPERATIVE_KERNEL(_1, _2, _3, NAME, ...) NAME
 #define COOPERATIVE_KERNEL(kernel_name, ...)                          \
   do {                                                                \
     int dev = 0;                                                      \
     cudaDeviceProp deviceProp;                                        \
     cudaGetDeviceProperties(&deviceProp, dev);                        \
-    int blockDim = THREADSPERBLOCK;                                   \
     int gridDim = deviceProp.multiProcessorCount;                     \
-    GET_COOPERATIVE_KERNEL(__VA_ARGS__, COOPERATIVE_KERNEL_SHARED_MEMORY, COOPERATIVE_KERNEL_NO_SHARED_MEMORY)(kernel_name, __VA_ARGS__)            \
+    GET_COOPERATIVE_KERNEL(__VA_ARGS__, COOPERATIVE_KERNEL_SHARED_MEMORY, 0, COOPERATIVE_KERNEL_NO_SHARED_MEMORY)(kernel_name, __VA_ARGS__)            \
     cudaDeviceSynchronize();                                          \
   } while (0); 
 """
