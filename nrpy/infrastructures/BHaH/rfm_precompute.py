@@ -446,15 +446,14 @@ def register_CFunctions_rfm_precompute(
             malloc_lines = "#ifdef __CUDACC__\nrfm_struct* tmp_rfmstruct = (rfm_struct *)malloc(sizeof(rfm_struct));\n#endif\n"
             malloc_lines += "\n".join(f"""
 #ifdef __CUDACC__
-REAL* {m} = NULL;
-cudaMalloc((void**)&{m}, sizeof(REAL) * ({sz}));
-cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-tmp_rfmstruct->{m} = {m};
+  REAL* {m} = NULL;
+  CUDA_MALLOC({m}, sizeof(REAL) * ({sz}));
+  tmp_rfmstruct->{m} = {m};
 #else
 BHAH_MALLOC__PtrMember(rfmstruct, {m}, sizeof(REAL) * ({sz}));
 #endif
 """ for m, sz in rfm_precompute.member_specs)
-            malloc_lines += "#ifdef __CUDACC__\ncudaMemcpy(rfmstruct, tmp_rfmstruct, sizeof(rfm_struct), cudaMemcpyHostToDevice);\nfree(tmp_rfmstruct);\n#endif\n"
+            malloc_lines += "#ifdef __CUDACC__\nCUDA_COPY_TO(rfmstruct, tmp_rfmstruct, sizeof(rfm_struct));\nfree(tmp_rfmstruct);\n#endif\n"
             malloc_body = f"""
 {malloc_lines}"""
         else:
@@ -481,7 +480,7 @@ IFCUDARUN({{
             free_lines = """
 #ifdef __CUDACC__
   rfm_struct* tmp_rfmstruct = (rfm_struct *)malloc(sizeof(rfm_struct));
-  cudaMemcpy(tmp_rfmstruct, rfmstruct, sizeof(rfm_struct), cudaMemcpyDeviceToHost);
+  CUDA_COPY_FROM(tmp_rfmstruct, rfmstruct, sizeof(rfm_struct));
 #endif
 """
             free_lines += "\n".join(f"""

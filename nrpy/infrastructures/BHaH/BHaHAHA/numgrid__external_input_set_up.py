@@ -438,35 +438,28 @@ This function performs the following steps:
 #ifdef __CUDACC__
   const int total_elements_no_gzs = commondata->bhahaha_params_and_data->Nr_external_input * commondata->external_input_Nxx1 * commondata->external_input_Nxx2;
   REAL *restrict d_external_input_gfs_no_gzs = NULL;
-  cudaMalloc((void**)&d_external_input_gfs_no_gzs, sizeof(REAL)*NUM_EXT_INPUT_CARTESIAN_GFS * total_elements_incl_gzs);
-  cudaMemcpy(d_external_input_gfs_no_gzs, commondata->external_input_gfs_Cart_basis_no_gzs,  sizeof(REAL)*NUM_EXT_INPUT_CARTESIAN_GFS * total_elements_no_gzs, cudaMemcpyHostToDevice);
+  CUDA_MALLOC(d_external_input_gfs_no_gzs, sizeof(REAL) * NUM_EXT_INPUT_CARTESIAN_GFS * total_elements_incl_gzs);
+  CUDA_COPY_TO(d_external_input_gfs_no_gzs, commondata->external_input_gfs_Cart_basis_no_gzs,
+             sizeof(REAL) * NUM_EXT_INPUT_CARTESIAN_GFS * total_elements_no_gzs);
   commondata->external_input_gfs_Cart_basis_no_gzs = d_external_input_gfs_no_gzs;
 #endif
 
 #ifdef __CUDACC__
-  //Deep copy bhahaha_params_and_data & bhahaha_diagnostics
+  // Deep copy bhahaha_params_and_data & bhahaha_diagnostics
   bhahaha_params_and_data_struct *d_bhahaha_params_and_data = NULL;
-  cudaMalloc((void**)&d_bhahaha_params_and_data, sizeof(bhahaha_params_and_data_struct));
-  cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-  cudaMemcpy(d_bhahaha_params_and_data, commondata->bhahaha_params_and_data, sizeof(bhahaha_params_and_data_struct), cudaMemcpyHostToDevice);
-  cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+  CUDA_MALLOC(d_bhahaha_params_and_data, sizeof(bhahaha_params_and_data_struct));
+  CUDA_COPY_TO(d_bhahaha_params_and_data, commondata->bhahaha_params_and_data, sizeof(bhahaha_params_and_data_struct));
   commondata->bhahaha_params_and_data = d_bhahaha_params_and_data;
 
   bhahaha_diagnostics_struct *d_bhahaha_diagnostics = NULL;
-  cudaMalloc((void**)&d_bhahaha_diagnostics, sizeof(bhahaha_diagnostics_struct));
-  cudaMemcpy(d_bhahaha_diagnostics, commondata->bhahaha_diagnostics, sizeof(bhahaha_diagnostics_struct), cudaMemcpyHostToDevice);
-  cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+  CUDA_MALLOC(d_bhahaha_diagnostics, sizeof(bhahaha_diagnostics_struct));
+  CUDA_COPY_TO(d_bhahaha_diagnostics, commondata->bhahaha_diagnostics, sizeof(bhahaha_diagnostics_struct));
   commondata->bhahaha_diagnostics = d_bhahaha_diagnostics;
 #endif
 
   // Step 2.b: Allocate memory for the external input gridfunctions with ghost zones.
-#ifdef __CUDACC__
-  REAL *external_input_gfs = NULL;
-  cudaMalloc((void**)&external_input_gfs, NUM_EXT_INPUT_CONFORMAL_GFS * total_elements_incl_gzs * sizeof(REAL));
-  cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-#else
-  REAL *restrict external_input_gfs = (REAL *)malloc(NUM_EXT_INPUT_CONFORMAL_GFS * total_elements_incl_gzs * sizeof(REAL));
-#endif
+  REAL *restrict external_input_gfs = NULL;
+  MALLOC(external_input_gfs, NUM_EXT_INPUT_CONFORMAL_GFS * total_elements_incl_gzs * sizeof(REAL));
   if (external_input_gfs == NULL) {
     commondata->error_flag =  NUMGRID_EXTERN_MALLOC_ERROR_GFS;
     return;
@@ -507,8 +500,8 @@ This function performs the following steps:
 #ifdef __CUDACC__
   //Allocate and initialize device side copy of commondata
   commondata_struct *d_commondata = NULL;
-  cudaMalloc((void**)&d_commondata, sizeof(commondata_struct));
-  cudaMemcpy(d_commondata, commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
+  CUDA_MALLOC(d_commondata, sizeof(commondata_struct));
+  CUDA_COPY_TO(d_commondata, commondata, sizeof(commondata_struct));
 #endif
 
   {
@@ -517,8 +510,7 @@ This function performs the following steps:
     COOPERATIVE_KERNEL(initialize_transform_and_rescale, Args);
 
     //Copy changes to host side commondata  
-    cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
+    CUDA_COPY_FROM(commondata, d_commondata, sizeof(commondata_struct));
 #else
     initialize_transform_and_rescale(commondata);
 #endif
@@ -539,8 +531,7 @@ This function performs the following steps:
     commondata->bcstruct_Nxx_plus_2NGHOSTS2 = Nxx_plus_2NGHOSTS2;
 #ifdef __CUDACC__
     // Update device side commondata
-    cudaMemcpy(d_commondata, commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
+    CUDA_COPY_TO(d_commondata, commondata, sizeof(commondata_struct));
 #endif
 
     // Step 5.b: Initialize the boundary condition structure for external input data.
@@ -551,16 +542,15 @@ This function performs the following steps:
     bah_bcstruct_set_up(commondata, NULL, commondata->external_input_r_theta_phi, &external_input_bcstruct);
 #endif
 #ifdef __CUDACC__
-    cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
+    CUDA_COPY_FROM(commondata, d_commondata, sizeof(commondata_struct));
 #endif
     if (commondata->error_flag != BHAHAHA_SUCCESS)
       return;
 #ifdef __CUDACC__
     //Create a device side copy of external_input_bcstruct
     bc_struct *d_external_input_bcstruct = NULL;
-    cudaMalloc((void**)&d_external_input_bcstruct, sizeof(bc_struct));
-    cudaMemcpy(d_external_input_bcstruct, &external_input_bcstruct, sizeof(bc_struct), cudaMemcpyHostToDevice);
+    CUDA_MALLOC(d_external_input_bcstruct, sizeof(bc_struct));
+    CUDA_COPY_TO(d_external_input_bcstruct, &external_input_bcstruct, sizeof(bc_struct));
 #endif
 
     // Step 5.c: Apply boundary conditions
@@ -578,19 +568,16 @@ This function performs the following steps:
     
     // Step 5.d: Free allocated memory for boundary condition structures to prevent memory leaks.
 #ifdef __CUDACC__
-    cudaFree(d_external_input_bcstruct);
-    cudaCheckErrors(cudaFree, "cudaFree failure");
+    CUDA_FREE(d_external_input_bcstruct);
 #endif
     FREE(external_input_bcstruct.inner_bc_array);
-for (int ng = 0; ng < NGHOSTS * 3; ng++)
+    for (int ng = 0; ng < NGHOSTS * 3; ng++)
       FREE(external_input_bcstruct.pure_outer_bc_array[ng]);
   } // END BLOCK: applying boundary conditions
 
 #ifdef __CUDACC__
-  cudaFree(d_commondata);
-  cudaCheckErrors(cudaFree, "cudaFree failure");
-  cudaFree(d_external_input_gfs_no_gzs);
-  cudaCheckErrors(cudaFree, "cudaFree failure");
+  CUDA_FREE(d_commondata);
+  CUDA_FREE(d_external_input_gfs_no_gzs);
 #endif
   return;
 """

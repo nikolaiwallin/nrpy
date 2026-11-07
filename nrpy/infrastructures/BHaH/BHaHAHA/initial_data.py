@@ -114,13 +114,8 @@ void set_initial_data(commondata_struct *restrict commondata, griddata_struct *r
   REAL(*dst_pts)[2] = NULL;
   if (commondata->use_coarse_horizon) {
     const int num_dst_pts = Nxx1 * Nxx2;
-    #ifdef __CUDACC__
-    cudaMalloc((void**)&coarse_to_fine, sizeof(REAL) * Nxx1 * Nxx2);
-    cudaMalloc((void**)&dst_pts, sizeof(REAL)*num_dst_pts*2);
-    #else
-    coarse_to_fine = (double *)malloc(sizeof(REAL) * Nxx1 * Nxx2);
-    dst_pts = (double (*)[2])malloc(num_dst_pts * sizeof(*dst_pts));
-    #endif
+    MALLOC(coarse_to_fine, sizeof(REAL) * Nxx1 * Nxx2);
+    MALLOC(dst_pts, num_dst_pts * sizeof(*dst_pts));
     if (dst_pts == NULL || coarse_to_fine == NULL) {
       commondata->error_flag = INITIAL_DATA_MALLOC_ERROR;
       return;
@@ -129,12 +124,12 @@ void set_initial_data(commondata_struct *restrict commondata, griddata_struct *r
 #ifdef __CUDACC__
   // Create device side copies of commondata and griddata
   commondata_struct *d_commondata = NULL;
-  cudaMalloc((void**)&d_commondata, sizeof(commondata_struct));
-  cudaMemcpy(d_commondata, commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
+  CUDA_MALLOC(d_commondata, sizeof(commondata_struct));
+  CUDA_COPY_TO(d_commondata, commondata, sizeof(commondata_struct));
 
   griddata_struct *d_griddata = NULL;
-  cudaMalloc((void**)&d_griddata, sizeof(griddata_struct));
-  cudaMemcpy(d_griddata, griddata, sizeof(griddata_struct), cudaMemcpyHostToDevice);
+  CUDA_MALLOC(d_griddata, sizeof(griddata_struct));
+  CUDA_COPY_TO(d_griddata, griddata, sizeof(griddata_struct));
 #endif
     
 #ifdef __CUDACC__
@@ -152,12 +147,11 @@ void set_initial_data(commondata_struct *restrict commondata, griddata_struct *r
 #endif
 
 #ifdef __CUDACC__
-  //Retrieve commondata
-  cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
-  cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
-  //Free device side copies of commondata and griddata
-  cudaFree(d_commondata);
-  cudaFree(d_griddata);
+  // Retrieve commondata
+  CUDA_COPY_FROM(commondata, d_commondata, sizeof(commondata_struct));
+  // Free device side copies of commondata and griddata
+  CUDA_FREE(d_commondata);
+  CUDA_FREE(d_griddata);
 #endif
 
   // Free memory

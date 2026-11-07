@@ -217,23 +217,18 @@ void bah_numgrid__evol_set_up_kernel(commondata_struct *restrict commondata, gri
   }
 
   // Step 7: Allocate reference-metric precompute lookup arrays.
-#ifdef __CUDACC__
-  cudaMalloc((void**)&(griddata[grid].rfmstruct),sizeof(rfm_struct));
-  cudaCheckErrors(cudaMalloc, "cudaMalloc failure"); 
-#else 
-  griddata[grid].rfmstruct = (rfm_struct *)malloc(sizeof(rfm_struct));
-#endif
+  MALLOC(griddata[grid].rfmstruct, sizeof(rfm_struct));
   bah_rfm_precompute_malloc(commondata, params, griddata[grid].rfmstruct);
 
 #ifdef __CUDACC__
   // Create device side copy of commondata and griddata
   commondata_struct *d_commondata = NULL;
-  cudaMalloc((void**)&d_commondata, sizeof(commondata_struct));
-  cudaMemcpy(d_commondata, commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
+  CUDA_MALLOC(d_commondata, sizeof(commondata_struct));
+  CUDA_COPY_TO(d_commondata, commondata, sizeof(commondata_struct));
 
   griddata_struct *d_griddata = NULL;
-  cudaMalloc((void**)&d_griddata, sizeof(griddata_struct));
-  cudaMemcpy(d_griddata, griddata, sizeof(griddata_struct), cudaMemcpyHostToDevice);
+  CUDA_MALLOC(d_griddata, sizeof(griddata_struct));
+  CUDA_COPY_TO(d_griddata, griddata, sizeof(griddata_struct));
 #endif
   
   // Initialize cell-centered grid coordinate arrays and define reference metric precompute lookup arrays.
@@ -256,13 +251,12 @@ void bah_numgrid__evol_set_up_kernel(commondata_struct *restrict commondata, gri
     commondata->bcstruct_Nxx_plus_2NGHOSTS2 = params->Nxx_plus_2NGHOSTS2;
 #ifdef __CUDACC__
     // Update device side commondata copy
-    cudaMemcpy(d_commondata, commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
+    CUDA_COPY_TO(d_commondata, commondata, sizeof(commondata_struct));
 #endif
     
 #ifdef __CUDACC__
     bah_bcstruct_set_up(d_commondata, &griddata->params, griddata[grid].xx, &griddata[grid].bcstruct);
-    cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    CUDA_COPY_FROM(commondata, d_commondata, sizeof(commondata_struct));
 #else
     bah_bcstruct_set_up(commondata, &griddata->params, griddata[grid].xx, &griddata[grid].bcstruct);
 #endif
@@ -276,8 +270,8 @@ void bah_numgrid__evol_set_up_kernel(commondata_struct *restrict commondata, gri
 
   //Free 
 #ifdef __CUDACC__
-  cudaFree(d_commondata);
-  cudaFree(d_griddata);
+  CUDA_FREE(d_commondata);
+  CUDA_FREE(d_griddata);
 #endif
 
 """

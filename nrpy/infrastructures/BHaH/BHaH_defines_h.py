@@ -522,26 +522,40 @@ do { \
 } while(0);
 
 #ifdef __CUDACC__
-#define MALLOC(a, sz)                                                   \
-  do {                                                                  \
-    cudaMalloc((void**)&(a),sz);                                        \
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");                  \
-  } while (0);
-#else
-#define MALLOC(a, sz)                                                   \
-  do {                                                                  \
-    a = (BHAH_TYPEOF(a))malloc(sz);                                     \
-  } while (0);
+#define CUDA_MALLOC(a, sz) \
+do { \
+    cudaMalloc((void **)&(a), sz); \
+        cudaCheckErrors(cudaMalloc, "cudaMalloc failure"); \
+} while (0);
+#define CUDA_FREE(a) \
+do { \
+    cudaFree((a)); \
+    cudaCheckErrors(cudaFree, "cudaFree failure"); \
+} while (0);
+
+#define CUDA_COPY_TO(a, b, sz) \
+do { \
+    cudaMemcpy((a), (b), (sz), cudaMemcpyHostToDevice); \
+    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); \
+} while (0);
+
+#define CUDA_COPY_FROM(a, b, sz) \
+do { \
+    cudaMemcpy((a), (b), (sz), cudaMemcpyDeviceToHost); \
+    cudaCheckErrors(cudaMemcpy, "cudaCopyFrom failure"); \
+} while (0);
 #endif
 
 #ifdef __CUDACC__
-#define FREE(a)                                                         \
-  do {                                                                  \
-    cudaFree((a));                                                      \
-    cudaCheckErrors(cudaFree, "cudaFree failure");                      \
-  } while (0);
+#define MALLOC(a, sz) CUDA_MALLOC((a), (sz))
 #else
-#define FREE(a) free((a));
+#define MALLOC(a, sz) BHAH_MALLOC((a), (sz))
+#endif
+
+#ifdef __CUDACC__
+#define FREE(a) CUDA_FREE(a)
+#else
+#define FREE(a) free((a))
 #endif
 
 #ifdef __CUDACC__

@@ -455,14 +455,10 @@ int main() {
     commondata.interp_src_Nxx_plus_2NGHOSTS2 = dst_Nxx_plus_2NGHOSTS[2];
 
 #ifdef __CUDACC__  
-    cudaMalloc((void**)&(d_src_gf), sizeof(REAL) * NUM_EXT_INPUT_CONFORMAL_GFS * total_src_pts);
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-    cudaMalloc((void**)&(d_dst_gfs), sizeof(REAL) * NUM_EXT_INPUT_CONFORMAL_GFS * total_dst_pts);
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-    cudaMemcpy(d_src_gf, src_gf, sizeof(REAL) * NUM_EXT_INPUT_CONFORMAL_GFS * total_src_pts, cudaMemcpyHostToDevice);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
-    cudaMemcpy(d_dst_gfs, dst_gfs, sizeof(REAL) * NUM_EXT_INPUT_CONFORMAL_GFS * total_dst_pts, cudaMemcpyHostToDevice);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    CUDA_MALLOC(d_src_gf, sizeof(REAL) * NUM_EXT_INPUT_CONFORMAL_GFS * total_src_pts);
+    CUDA_MALLOC(d_dst_gfs, sizeof(REAL) * NUM_EXT_INPUT_CONFORMAL_GFS * total_dst_pts);
+    CUDA_COPY_TO(d_src_gf, src_gf, sizeof(REAL) * NUM_EXT_INPUT_CONFORMAL_GFS * total_src_pts);
+    CUDA_COPY_TO(d_dst_gfs, dst_gfs, sizeof(REAL) * NUM_EXT_INPUT_CONFORMAL_GFS * total_dst_pts);
     commondata.external_input_gfs = d_src_gf;
     commondata.interp_src_gfs = d_dst_gfs;
 #else
@@ -473,14 +469,10 @@ int main() {
     commondata.bhahaha_params_and_data->r_min_external_input = 0.0;
     for (int i = 0; i < 3; i++) {
 #ifdef __CUDACC__
-      cudaMalloc((void**)&(d_src_r_theta_phi[i]), sizeof(REAL) * dst_Nxx_plus_2NGHOSTS[i]);
-      cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-      cudaMemcpy(d_src_r_theta_phi[i], src_r_theta_phi[i], sizeof(REAL) * dst_Nxx_plus_2NGHOSTS[i], cudaMemcpyHostToDevice);
-      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
-      cudaMalloc((void**)&(d_dst_r_theta_phi[i]), sizeof(REAL) * dst_Nxx_plus_2NGHOSTS[i]);
-      cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-      cudaMemcpy(d_dst_r_theta_phi[i], dst_r_theta_phi[i], sizeof(REAL) * dst_Nxx_plus_2NGHOSTS[i], cudaMemcpyHostToDevice);
-      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+      CUDA_MALLOC(d_src_r_theta_phi[i], sizeof(REAL) * dst_Nxx_plus_2NGHOSTS[i]);
+      CUDA_COPY_TO(d_src_r_theta_phi[i], src_r_theta_phi[i], sizeof(REAL) * dst_Nxx_plus_2NGHOSTS[i]);
+      CUDA_MALLOC(d_dst_r_theta_phi[i], sizeof(REAL) * dst_Nxx_plus_2NGHOSTS[i]);
+      CUDA_COPY_TO(d_dst_r_theta_phi[i], dst_r_theta_phi[i], sizeof(REAL) * dst_Nxx_plus_2NGHOSTS[i]);
       commondata.external_input_r_theta_phi[i] = d_src_r_theta_phi[i];
       commondata.interp_src_r_theta_phi[i] = d_dst_r_theta_phi[i];
 #else      
@@ -494,10 +486,8 @@ int main() {
 #endif
 #ifdef __CUDACC__
     commondata_struct *d_commondata = NULL;
-    cudaMalloc((void **)&d_commondata, sizeof(commondata_struct));
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-    cudaMemcpy(d_commondata, &commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice));
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    CUDA_MALLOC(d_commondata, sizeof(commondata_struct));
+    CUDA_COPY_TO(d_commondata, &commondata, sizeof(commondata_struct));
     void *Args[] = {&d_commondata}; 
     int dev = 0;
     cudaDeviceProp deviceProp;
@@ -505,14 +495,11 @@ int main() {
     int gridDim = deviceProp.multiProcessorCount;
     cudaLaunchCooperativeKernel((void *)bah_interpolation_2d_external_input_to_interp_src_grid_kernel, gridDim, THREADSPERBLOCK, Args);
     cudaDeviceSynchronize();
-    cudaMemcpy(&commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
-    cudaFree(d_commondata);
-    cudaMemcpy(dst_gfs, d_dst_gfs, sizeof(REAL) * NUM_EXT_INPUT_CONFORMAL_GFS * total_dst_pts, cudaMemcpyDeviceToHost);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    CUDA_COPY_FROM(&commondata, d_commondata, sizeof(commondata_struct));
+    CUDA_FREE(d_commondata);
+    CUDA_COPY_FROM(dst_gfs, d_dst_gfs, sizeof(REAL) * NUM_EXT_INPUT_CONFORMAL_GFS * total_dst_pts);
     for (int i = 0; i < 3; i++) {
-      cudaMemcpy(dst_r_theta_phi[i], d_dst_r_theta_phi[i], sizeof(REAL) * dst_Nxx_plus_2NGHOSTS[i], cudaMemcpyDeviceToHost);
-      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+      CUDA_COPY_FROM(dst_r_theta_phi[i], d_dst_r_theta_phi[i], sizeof(REAL) * dst_Nxx_plus_2NGHOSTS[i]);
     }
 #else
     bah_interpolation_2d_external_input_to_interp_src_grid(&commondata);
@@ -591,11 +578,11 @@ cleanup:
 
 #ifdef __CUDACC__
   for (int i = 0; i < 3; i++) {
-    cudaFree(d_src_r_theta_phi[i]);
-    cudaFree(d_dst_r_theta_phi[i]);
+    CUDA_FREE(d_src_r_theta_phi[i]);
+    CUDA_FREE(d_dst_r_theta_phi[i]);
   }
-  cudaFree(d_src_gf);
-  cudaFree(d_dst_gfs);
+  CUDA_FREE(d_src_gf);
+  CUDA_FREE(d_dst_gfs);
 #endif
   return return_code;
 } // END FUNCTION: main

@@ -391,8 +391,7 @@ and computes necessary spatial derivatives.
 #ifdef __CUDACC__
   //Allocate a device side copy of commondata
   commondata_struct *d_commondata = NULL;
-  cudaMalloc((void**)&d_commondata, sizeof(commondata_struct));
-  cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
+  CUDA_MALLOC(d_commondata, sizeof(commondata_struct));
 #endif
 
   // Step 1: Configure grid parameters for the interpolation source.
@@ -424,14 +423,9 @@ and computes necessary spatial derivatives.
   // Step 2: Allocate interpolation source grid functions and coordinate arrays for the interpolation source grid.
   {
     // Step 2.a: Allocate memory for interpolation source grid functions.
-#ifdef __CUDACC__
-    cudaMalloc((void**)&commondata->interp_src_gfs, sizeof(REAL) * commondata->interp_src_Nxx_plus_2NGHOSTS0 * commondata->interp_src_Nxx_plus_2NGHOSTS1 *
-                                        commondata->interp_src_Nxx_plus_2NGHOSTS2 * NUM_INTERP_SRC_GFS);
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-#else
-    commondata->interp_src_gfs = (double*)malloc(sizeof(REAL) * commondata->interp_src_Nxx_plus_2NGHOSTS0 * commondata->interp_src_Nxx_plus_2NGHOSTS1 *
-                                        commondata->interp_src_Nxx_plus_2NGHOSTS2 * NUM_INTERP_SRC_GFS);
-#endif
+    MALLOC(commondata->interp_src_gfs, sizeof(REAL) * commondata->interp_src_Nxx_plus_2NGHOSTS0 *
+                                                         commondata->interp_src_Nxx_plus_2NGHOSTS1 * commondata->interp_src_Nxx_plus_2NGHOSTS2 *
+                                                         NUM_INTERP_SRC_GFS);
     if (commondata->interp_src_gfs == NULL) {
       // Memory allocation failed for grid functions.
       commondata->error_flag = NUMGRID_INTERP_MALLOC_ERROR_GFS;
@@ -439,18 +433,9 @@ and computes necessary spatial derivatives.
     }
 
     // Step 2.b: Allocate memory for radial, theta, and phi coordinate arrays.
-#ifdef __CUDACC__
-    cudaMalloc((void**)&commondata->interp_src_r_theta_phi[0], sizeof(REAL) * commondata->interp_src_Nxx_plus_2NGHOSTS0);
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-    cudaMalloc((void**)&commondata->interp_src_r_theta_phi[1], sizeof(REAL) * commondata->interp_src_Nxx_plus_2NGHOSTS1);
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-    cudaMalloc((void**)&commondata->interp_src_r_theta_phi[2], sizeof(REAL) * commondata->interp_src_Nxx_plus_2NGHOSTS2);
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-#else
-    commondata->interp_src_r_theta_phi[0] = (REAL *)malloc(sizeof(REAL) * commondata->interp_src_Nxx_plus_2NGHOSTS0);
-    commondata->interp_src_r_theta_phi[1] = (REAL *)malloc(sizeof(REAL) * commondata->interp_src_Nxx_plus_2NGHOSTS1);
-    commondata->interp_src_r_theta_phi[2] = (REAL *)malloc(sizeof(REAL) * commondata->interp_src_Nxx_plus_2NGHOSTS2);
-#endif
+    MALLOC(commondata->interp_src_r_theta_phi[0], sizeof(REAL) * commondata->interp_src_Nxx_plus_2NGHOSTS0);
+    MALLOC(commondata->interp_src_r_theta_phi[1], sizeof(REAL) * commondata->interp_src_Nxx_plus_2NGHOSTS1);
+    MALLOC(commondata->interp_src_r_theta_phi[2], sizeof(REAL) * commondata->interp_src_Nxx_plus_2NGHOSTS2);
     if (commondata->interp_src_r_theta_phi[0] == NULL || commondata->interp_src_r_theta_phi[1] == NULL ||
         commondata->interp_src_r_theta_phi[2] == NULL) {
       // Free previously allocated grid functions before exiting due to memory allocation failure.
@@ -462,9 +447,7 @@ and computes necessary spatial derivatives.
 
 #ifdef __CUDACC__
   // Update device side commondata
-  cudaMemcpy(d_commondata, commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
-  cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
-
+  CUDA_COPY_TO(d_commondata, commondata, sizeof(commondata_struct));
 #endif
 
   // Step 3: Initialize coordinate arrays and Perform interpolation from external input to the interpolation source grid.
@@ -473,8 +456,7 @@ and computes necessary spatial derivatives.
 #ifdef __CUDACC__
     void *Args[] = {&d_commondata};
     COOPERATIVE_KERNEL(initialize_and_interpolate, Args);
-    cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    CUDA_COPY_FROM(commondata, d_commondata, sizeof(commondata_struct));
 #else
     initialize_and_interpolate(commondata);
 #endif 
@@ -493,15 +475,13 @@ and computes necessary spatial derivatives.
     commondata->bcstruct_Nxx_plus_2NGHOSTS2 = commondata->interp_src_Nxx_plus_2NGHOSTS2;
 #ifdef __CUDACC__
     // Update device side commondata 
-    cudaMemcpy(d_commondata, commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    CUDA_COPY_TO(d_commondata, commondata, sizeof(commondata_struct));
 #endif
 
     // Set up boundary conditions based on the initialized grid.
 #ifdef __CUDACC__
     bah_bcstruct_set_up(d_commondata, NULL, commondata->interp_src_r_theta_phi, &interp_src_bcstruct);
-    cudaMemcpy(commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    CUDA_COPY_FROM(commondata, d_commondata, sizeof(commondata_struct));
 #else
     bah_bcstruct_set_up(commondata, NULL, commondata->interp_src_r_theta_phi, &interp_src_bcstruct);
 #endif
@@ -515,10 +495,8 @@ and computes necessary spatial derivatives.
 #ifdef __CUDACC__
     // Create a device side copy of interp_src_bcstruct
     bc_struct *d_interp_src_bcstruct = NULL;
-    cudaMalloc((void**)&d_interp_src_bcstruct, sizeof(bc_struct));
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-    cudaMemcpy(d_interp_src_bcstruct, &interp_src_bcstruct, sizeof(bc_struct), cudaMemcpyHostToDevice);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    CUDA_MALLOC(d_interp_src_bcstruct, sizeof(bc_struct));
+    CUDA_COPY_TO(d_interp_src_bcstruct, &interp_src_bcstruct, sizeof(bc_struct));
 
     // Set interpolation source grid function parity in device constant memory
     cudaMemcpyToSymbol(c_interp_src_gf_parity, &interp_src_gf_parity, 35*sizeof(int8_t));
@@ -535,8 +513,7 @@ and computes necessary spatial derivatives.
 
     // Release allocated memory for boundary condition structures.
 #ifdef __CUDACC__
-    cudaFree(d_interp_src_bcstruct);
-    cudaCheckErrors(cudaFree, "cudaFree failure");
+    CUDA_FREE(d_interp_src_bcstruct);
 #endif
     FREE(interp_src_bcstruct.inner_bc_array);
     for (int ng = 0; ng < NGHOSTS * 3; ng++)
@@ -545,8 +522,7 @@ and computes necessary spatial derivatives.
 
   //Copy then free device side copy of commondata
 #ifdef __CUDACC__
-  cudaFree(d_commondata);
-  cudaCheckErrors(cudaFree, "cudaFree failure");
+  CUDA_FREE(d_commondata);
 #endif
 
 """

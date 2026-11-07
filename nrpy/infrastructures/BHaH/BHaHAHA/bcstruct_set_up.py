@@ -1182,7 +1182,7 @@ void set_outer_pts(commondata_struct *restrict commondata, const params_struct *
     body = r"""
 #ifdef __CUDACC__
   commondata_struct *h_commondata = (commondata_struct*)malloc(sizeof(commondata_struct));
-  cudaMemcpy(h_commondata, commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
+  CUDA_COPY_FROM(h_commondata, commondata, sizeof(commondata_struct));
   const int Nxx_plus_2NGHOSTS0 = h_commondata->bcstruct_Nxx_plus_2NGHOSTS0;
   const int Nxx_plus_2NGHOSTS1 = h_commondata->bcstruct_Nxx_plus_2NGHOSTS1;
   const int Nxx_plus_2NGHOSTS2 = h_commondata->bcstruct_Nxx_plus_2NGHOSTS2;
@@ -1194,17 +1194,13 @@ void set_outer_pts(commondata_struct *restrict commondata, const params_struct *
 
 #ifdef __CUDACC__
   bc_struct *d_bcstruct = NULL;
-  cudaMalloc((void**)&d_bcstruct, sizeof(bc_struct));
-  cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-  cudaMemcpy(d_bcstruct, bcstruct, sizeof(bc_struct), cudaMemcpyHostToDevice);
-  cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+  CUDA_MALLOC(d_bcstruct, sizeof(bc_struct));
+  CUDA_COPY_TO(d_bcstruct, bcstruct, sizeof(bc_struct));
   
   params_struct *d_bc_params = NULL;
   if (bc_params != NULL) {
-    cudaMalloc((void**)&d_bc_params, sizeof(params_struct ));
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-    cudaMemcpy(d_bc_params, bc_params, sizeof(params_struct ), cudaMemcpyHostToDevice);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    CUDA_MALLOC(d_bc_params, sizeof(params_struct));
+    CUDA_COPY_TO(d_bc_params, bc_params, sizeof(params_struct));
   }
 #endif
 
@@ -1215,33 +1211,27 @@ void set_outer_pts(commondata_struct *restrict commondata, const params_struct *
 #ifdef __CUDACC__
     void *Args[] = {(void *)&commondata, (void *)&d_bc_params, (void *)&xx[0], (void *)&xx[1], (void *)&xx[2], &d_bcstruct};
     COOPERATIVE_KERNEL(count_num_inner_pts, Args); 
-
-    cudaMemcpy(bcstruct, d_bcstruct, sizeof(bc_struct), cudaMemcpyDeviceToHost);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+    CUDA_COPY_FROM(bcstruct, d_bcstruct, sizeof(bc_struct));
 #else 
     count_num_inner_pts(commondata, bc_params, xx, bcstruct);
 #endif
     int num_inner = bcstruct->bc_info.num_inner_boundary_points;
 
     // Next allocate memory for inner_boundary_points:
+    MALLOC(bcstruct->inner_bc_array, sizeof(innerpt_bc_struct) * num_inner);
 #ifdef __CUDACC__
-    cudaMalloc((void**)&bcstruct->inner_bc_array, sizeof(innerpt_bc_struct) * num_inner);
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-    cudaMemcpy(d_bcstruct, bcstruct, sizeof(bc_struct), cudaMemcpyHostToDevice);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
-#else
-    bcstruct->inner_bc_array = (innerpt_bc_struct *)malloc(sizeof(innerpt_bc_struct) * num_inner);
+    CUDA_COPY_TO(d_bcstruct, bcstruct, sizeof(bc_struct));
 #endif
 
     // Then set inner_bc_array:
 #ifdef __CUDACC__
     int *which_inner = NULL;
-    cudaMalloc((void**)&which_inner, sizeof(int));
-
+    CUDA_MALLOC(which_inner, sizeof(int));
     set_inner_pts<<<12,64>>>(commondata, d_bc_params, xx[0], xx[1], xx[2], d_bcstruct, which_inner);
+    cudaCheckErrors(cudaKernel, "set_inner_pts failure");
     cudaDeviceSynchronize();
-    cudaFree(which_inner);
-    cudaMemcpy(h_commondata, commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
+    CUDA_FREE(which_inner);
+    CUDA_COPY_FROM(h_commondata, commondata, sizeof(commondata_struct));
 #else
     set_inner_pts(commondata, bc_params, xx, bcstruct);
 #endif
@@ -1273,15 +1263,9 @@ void set_outer_pts(commondata_struct *restrict commondata, const params_struct *
     // x0min and x0max faces: Allocate memory for outer_bc_array and set bc_loop_bounds:
     //                        Note that x0min and x0max faces have exactly the same size.
     //                   Also, note that face/2 --v   offsets this factor of 2 ------------------------------------------v
-#ifdef __CUDACC__
-    cudaMalloc((void**)&bcstruct->pure_outer_bc_array[3 * which_gz + face / 2],
-        sizeof(outerpt_bc_struct) * 2 *
-        ((x0min_face_range[1] - x0min_face_range[0]) * (x0min_face_range[3] - x0min_face_range[2]) * (x0min_face_range[5] - x0min_face_range[4])));
-#else
-    bcstruct->pure_outer_bc_array[3 * which_gz + face / 2] = (outerpt_bc_struct *)malloc(
-        sizeof(outerpt_bc_struct) * 2 *
-        ((x0min_face_range[1] - x0min_face_range[0]) * (x0min_face_range[3] - x0min_face_range[2]) * (x0min_face_range[5] - x0min_face_range[4])));
-#endif
+    MALLOC(bcstruct->pure_outer_bc_array[3 * which_gz + face / 2 ], sizeof(outerpt_bc_struct) * 2 *
+                   ((x0min_face_range[1] - x0min_face_range[0]) * (x0min_face_range[3] - x0min_face_range[2]) *
+                    (x0min_face_range[5] - x0min_face_range[4])));
     // x0min face: Can't set bc_info->bc_loop_bounds[which_gz][face] = { i0min,i0max, ... } since it's not const :(
     for (int i = 0; i < 6; i++) {
       bcstruct->bc_info.bc_loop_bounds[which_gz][face][i] = x0min_face_range[i];
@@ -1298,15 +1282,9 @@ void set_outer_pts(commondata_struct *restrict commondata, const params_struct *
     // x1min and x1max faces: Allocate memory for outer_bc_array and set bc_loop_bounds:
     //                        Note that x1min and x1max faces have exactly the same size.
     //                   Also, note that face/2 --v   offsets this factor of 2 ------------------------------------------v
-#ifdef __CUDACC__
-    cudaMalloc((void**)&bcstruct->pure_outer_bc_array[3 * which_gz + face / 2],
+    MALLOC(bcstruct->pure_outer_bc_array[3 * which_gz + face / 2],
         sizeof(outerpt_bc_struct) * 2 *
         ((x1min_face_range[1] - x1min_face_range[0]) * (x1min_face_range[3] - x1min_face_range[2]) * (x1min_face_range[5] - x1min_face_range[4])));
-#else
-    bcstruct->pure_outer_bc_array[3 * which_gz + face / 2] = (outerpt_bc_struct *)malloc(
-        sizeof(outerpt_bc_struct) * 2 *
-        ((x1min_face_range[1] - x1min_face_range[0]) * (x1min_face_range[3] - x1min_face_range[2]) * (x1min_face_range[5] - x1min_face_range[4])));
-#endif
     // x1min face: Can't set bc_info->bc_loop_bounds[which_gz][face] = { i0min,i0max, ... } since it's not const :(
     for (int i = 0; i < 6; i++) {
       bcstruct->bc_info.bc_loop_bounds[which_gz][face][i] = x1min_face_range[i];
@@ -1323,15 +1301,9 @@ void set_outer_pts(commondata_struct *restrict commondata, const params_struct *
     // x2min and x2max faces: Allocate memory for outer_bc_array and set bc_loop_bounds:
     //                        Note that x2min and x2max faces have exactly the same size.
     //                   Also, note that face/2 --v   offsets this factor of 2 ------------------------------------------v
-#ifdef __CUDACC__
-    cudaMalloc((void**)&bcstruct->pure_outer_bc_array[3 * which_gz + face / 2],
+    MALLOC(bcstruct->pure_outer_bc_array[3 * which_gz + face / 2],
         sizeof(outerpt_bc_struct) * 2 *
         ((x2min_face_range[1] - x2min_face_range[0]) * (x2min_face_range[3] - x2min_face_range[2]) * (x2min_face_range[5] - x2min_face_range[4])));
-#else
-    bcstruct->pure_outer_bc_array[3 * which_gz + face / 2] = (outerpt_bc_struct *)malloc(
-        sizeof(outerpt_bc_struct) * 2 *
-        ((x2min_face_range[1] - x2min_face_range[0]) * (x2min_face_range[3] - x2min_face_range[2]) * (x2min_face_range[5] - x2min_face_range[4])));
-#endif
     // x2min face: Can't set bc_info->bc_loop_bounds[which_gz][face] = { i0min,i0max, ... } since it's not const :(
     for (int i = 0; i < 6; i++) {
       bcstruct->bc_info.bc_loop_bounds[which_gz][face][i] = x2min_face_range[i];
@@ -1345,15 +1317,13 @@ void set_outer_pts(commondata_struct *restrict commondata, const params_struct *
   } // END LOOP over ghostzones
 
 #ifdef __CUDACC__
-    cudaMemcpy(d_bcstruct, bcstruct, sizeof(bc_struct), cudaMemcpyHostToDevice);
-    
-  
-    set_outer_pts<<<1, 64>>>(commondata, d_bc_params, xx[0], xx[1], xx[2], d_bcstruct);
-    cudaMemcpy(bcstruct, d_bcstruct, sizeof(bc_struct), cudaMemcpyDeviceToHost);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
-    cudaFree(d_bcstruct);
+  CUDA_COPY_TO(d_bcstruct, bcstruct, sizeof(bc_struct));
+  set_outer_pts<<<1, 64>>>(commondata, d_bc_params, xx[0], xx[1], xx[2], d_bcstruct);
+  cudaCheckErrors(cudaKernel, "set_outer_points failure");
+  CUDA_COPY_FROM(bcstruct, d_bcstruct, sizeof(bc_struct));
+  CUDA_FREE(d_bcstruct);
 #else
-    set_outer_pts(commondata, bc_params, xx, bcstruct);
+  set_outer_pts(commondata, bc_params, xx, bcstruct);
 #endif
 
   return BHAHAHA_SUCCESS;

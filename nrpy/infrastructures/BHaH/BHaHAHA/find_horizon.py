@@ -39,21 +39,21 @@ static REAL timeval_to_milliseconds(struct timeval start, struct timeval end) {
  *
  */
 static void deep_retrieve_after_error(bhahaha_params_and_data_struct *restrict h_bhahaha_params_and_data, bhahaha_diagnostics_struct *restrict h_bhahaha_diags, bhahaha_params_and_data_struct *restrict d_bhahaha_params_and_data, bhahaha_diagnostics_struct *restrict d_bhahaha_diags, REAL *restrict h_prev_horizon_m1, REAL *restrict h_prev_horizon_m2, REAL *restrict h_prev_horizon_m3, int Ntheta, int Nphi) {
-  cudaMemcpy(h_bhahaha_params_and_data, d_bhahaha_params_and_data, sizeof(bhahaha_params_and_data_struct), cudaMemcpyDeviceToHost);
+  CUDA_COPY_FROM(h_bhahaha_params_and_data, d_bhahaha_params_and_data, sizeof(bhahaha_params_and_data_struct));
 
-  cudaMemcpy(h_prev_horizon_m1, h_bhahaha_params_and_data->prev_horizon_m1, sizeof( REAL)* Ntheta * Nphi, cudaMemcpyDeviceToHost);
-  cudaMemcpy(h_prev_horizon_m2, h_bhahaha_params_and_data->prev_horizon_m2, sizeof( REAL)* Ntheta * Nphi, cudaMemcpyDeviceToHost);
-  cudaMemcpy(h_prev_horizon_m3, h_bhahaha_params_and_data->prev_horizon_m3, sizeof( REAL)* Ntheta * Nphi, cudaMemcpyDeviceToHost);
-  cudaFree(h_bhahaha_params_and_data->prev_horizon_m1);
-  cudaFree(h_bhahaha_params_and_data->prev_horizon_m2);
-  cudaFree(h_bhahaha_params_and_data->prev_horizon_m3);
+  CUDA_COPY_FROM(h_prev_horizon_m1, h_bhahaha_params_and_data->prev_horizon_m1, sizeof(REAL) * Ntheta * Nphi);
+  CUDA_COPY_FROM(h_prev_horizon_m2, h_bhahaha_params_and_data->prev_horizon_m2, sizeof(REAL) * Ntheta * Nphi);
+  CUDA_COPY_FROM(h_prev_horizon_m3, h_bhahaha_params_and_data->prev_horizon_m3, sizeof(REAL) * Ntheta * Nphi);
+  CUDA_FREE(h_bhahaha_params_and_data->prev_horizon_m1);
+  CUDA_FREE(h_bhahaha_params_and_data->prev_horizon_m2);
+  CUDA_FREE(h_bhahaha_params_and_data->prev_horizon_m3);
   h_bhahaha_params_and_data->prev_horizon_m1 = h_prev_horizon_m1;
   h_bhahaha_params_and_data->prev_horizon_m2 = h_prev_horizon_m2;
   h_bhahaha_params_and_data->prev_horizon_m3 = h_prev_horizon_m3;
 
-  cudaMemcpy(h_bhahaha_diags, d_bhahaha_diags, sizeof(bhahaha_diagnostics_struct), cudaMemcpyDeviceToHost);
-  cudaFree(d_bhahaha_params_and_data);
-  cudaFree(d_bhahaha_diags);
+  CUDA_COPY_FROM(h_bhahaha_diags, d_bhahaha_diags, sizeof(bhahaha_diagnostics_struct));
+  CUDA_FREE(d_bhahaha_params_and_data);
+  CUDA_FREE(d_bhahaha_diags);
 }
 #endif
 
@@ -80,17 +80,9 @@ static void free_all_but_external_input_gfs(commondata_struct *restrict commonda
   } // END LOOP: freeing pure outer boundary condition arrays
 
   // Free y_n_gfs, intermediate-stage gfs, and auxevol_gfs, needed by MoL.
-  #ifdef __CUDACC__
-  cudaFree(griddata[grid].gridfuncs.y_n_gfs);
-  #else
-  BHAH_FREE(griddata[grid].gridfuncs.y_n_gfs);
-  #endif
+  FREE(griddata[grid].gridfuncs.y_n_gfs);
   bah_MoL_free_intermediate_stage_gfs(&griddata[grid].gridfuncs);
-  #ifdef __CUDACC__
-  cudaFree(griddata[grid].gridfuncs.auxevol_gfs);
-  #else
-  BHAH_FREE(griddata[grid].gridfuncs.auxevol_gfs);
-  #endif
+  FREE(griddata[grid].gridfuncs.auxevol_gfs);
 
   // Free coordinate arrays for each dimension.
   for (int i = 0; i < 3; i++) {
@@ -173,18 +165,12 @@ to identify the apparent horizon with progressively refined grid resolutions.
   REAL *d_prev_horizon_m1 = NULL; 
   REAL *d_prev_horizon_m2 = NULL;
   REAL *d_prev_horizon_m3 = NULL;
-  cudaMalloc((void**)&d_prev_horizon_m1, sizeof( REAL)* Ntheta[n_resolutions - 1] * Nphi[n_resolutions - 1]);
-  cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-  cudaMalloc((void**)&d_prev_horizon_m2, sizeof( REAL)* Ntheta[n_resolutions - 1] * Nphi[n_resolutions - 1]);
-  cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-  cudaMalloc((void**)&d_prev_horizon_m3, sizeof( REAL)* Ntheta[n_resolutions - 1] * Nphi[n_resolutions - 1]);
-  cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-  cudaMemcpy(d_prev_horizon_m1, h_prev_horizon_m1, sizeof( REAL)* Ntheta[n_resolutions  - 1] * Nphi[n_resolutions  - 1], cudaMemcpyHostToDevice);
-  cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
-  cudaMemcpy(d_prev_horizon_m2, h_prev_horizon_m2, sizeof( REAL)* Ntheta[n_resolutions  - 1] * Nphi[n_resolutions  - 1], cudaMemcpyHostToDevice);
-  cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
-  cudaMemcpy(d_prev_horizon_m3, h_prev_horizon_m3, sizeof( REAL)* Ntheta[n_resolutions  - 1] * Nphi[n_resolutions  - 1], cudaMemcpyHostToDevice);
-  cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+  CUDA_MALLOC(d_prev_horizon_m1, sizeof(REAL) * Ntheta[n_resolutions - 1] * Nphi[n_resolutions - 1]);
+  CUDA_MALLOC(d_prev_horizon_m2, sizeof(REAL) * Ntheta[n_resolutions - 1] * Nphi[n_resolutions - 1]);
+  CUDA_MALLOC(d_prev_horizon_m3, sizeof(REAL) * Ntheta[n_resolutions - 1] * Nphi[n_resolutions - 1]);
+  CUDA_COPY_TO(d_prev_horizon_m1, h_prev_horizon_m1, sizeof(REAL) * Ntheta[n_resolutions - 1] * Nphi[n_resolutions - 1]);
+  CUDA_COPY_TO(d_prev_horizon_m2, h_prev_horizon_m2, sizeof(REAL) * Ntheta[n_resolutions - 1] * Nphi[n_resolutions - 1]);
+  CUDA_COPY_TO(d_prev_horizon_m3, h_prev_horizon_m3, sizeof(REAL) * Ntheta[n_resolutions - 1] * Nphi[n_resolutions - 1]);
   commondata.bhahaha_params_and_data->prev_horizon_m1 = d_prev_horizon_m1;
   commondata.bhahaha_params_and_data->prev_horizon_m2 = d_prev_horizon_m2;
   commondata.bhahaha_params_and_data->prev_horizon_m3 = d_prev_horizon_m3;
@@ -208,8 +194,8 @@ to identify the apparent horizon with progressively refined grid resolutions.
   
 #ifdef __CUDACC__
   commondata_struct *d_commondata = NULL;
-  cudaMalloc((void**)&d_commondata, sizeof(commondata_struct));
-  cudaMemcpy(d_commondata, &commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
+  CUDA_MALLOC(d_commondata, sizeof(commondata_struct));
+  CUDA_COPY_TO(d_commondata, &commondata, sizeof(commondata_struct));
 #endif
   
   // Step 2: Iterate over different grid resolutions to refine the apparent horizon.
@@ -250,7 +236,7 @@ to identify the apparent horizon with progressively refined grid resolutions.
 #ifdef __CUDACC__
     // Create a device side copy of griddata
     griddata_struct *d_griddata = NULL;
-    cudaMalloc((void**)&d_griddata, sizeof(griddata_struct) * MAXNUMGRIDS);
+    CUDA_MALLOC(d_griddata, sizeof(griddata_struct) * MAXNUMGRIDS);
 #endif
 
     // Step 2.d: Initialize griddata parameters to their default values.
@@ -278,20 +264,11 @@ to identify the apparent horizon with progressively refined grid resolutions.
       const int grid = 0;
 
       // Step 3.a: Allocate storage for initial grid functions (y_n_gfs).
-#ifdef __CUDACC__
-      cudaMalloc((void**)&griddata[grid].gridfuncs.y_n_gfs, NUM_EVOL_GFS * Nxx_plus_2NGHOSTS_tot * sizeof(REAL));
-#else
-      BHAH_MALLOC(griddata[grid].gridfuncs.y_n_gfs, NUM_EVOL_GFS * Nxx_plus_2NGHOSTS_tot * sizeof(REAL));
-#endif
+      MALLOC(griddata[grid].gridfuncs.y_n_gfs, NUM_EVOL_GFS * Nxx_plus_2NGHOSTS_tot * sizeof(REAL));
 
       // Step 3.b: Allocate storage for additional grid functions required for time-stepping.
       bah_MoL_malloc_intermediate_stage_gfs(&commondata, params, &griddata[grid].gridfuncs);
-#ifdef __CUDACC__
-      cudaMalloc((void**)&griddata[grid].gridfuncs.auxevol_gfs, NUM_AUXEVOL_GFS * Nxx_plus_2NGHOSTS_tot * sizeof(REAL));
-      cudaCheckErrors(cudaMalloc, "cudaMalloc failure");
-#else
-      BHAH_MALLOC(griddata[grid].gridfuncs.auxevol_gfs, NUM_AUXEVOL_GFS * Nxx_plus_2NGHOSTS_tot * sizeof(REAL));
-#endif
+      MALLOC(griddata[grid].gridfuncs.auxevol_gfs, NUM_AUXEVOL_GFS * Nxx_plus_2NGHOSTS_tot * sizeof(REAL));
 
       // Step 3.c: Initialize commondata.h_p = NULL, so that if Step 5.a (interp 1D) fails,
       //   it doesn't trigger a double free() of h_p.
@@ -315,24 +292,16 @@ to identify the apparent horizon with progressively refined grid resolutions.
     const int INTERP_ORDER = (2 * NinterpGHOSTS + 1); // Interpolation order corresponds to the number of points in the stencil per dimension.
 #endif
     
-#ifdef __CUDACC__
     //Allocate h_p
-    cudaMalloc((void**)&commondata.h_p,sizeof(REAL) * Nxx_plus_2NGHOSTS0 * Nxx_plus_2NGHOSTS1 * Nxx_plus_2NGHOSTS2);
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure"); 
-#else
-    commondata.h_p = (double *)malloc(sizeof(REAL) * Nxx_plus_2NGHOSTS0 * Nxx_plus_2NGHOSTS1 * Nxx_plus_2NGHOSTS2);
-#endif
+    MALLOC(commondata.h_p, sizeof(REAL) * Nxx_plus_2NGHOSTS0 * Nxx_plus_2NGHOSTS1 * Nxx_plus_2NGHOSTS2);
 
 #ifdef __CUDACC__
     // Allocate struct for intermediate gpu norm calculations
-    cudaMalloc((void**)&commondata.norms, sizeof(diag_norms_struct));
-    cudaCheckErrors(cudaMalloc, "cudaMalloc failure"); 
-  
+    CUDA_MALLOC(commondata.norms, sizeof(diag_norms_struct));
+
     // Update device side copies of commondata and griddata
-    cudaMemcpy(d_commondata, &commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
-    cudaMemcpy(d_griddata, griddata, sizeof(griddata_struct), cudaMemcpyHostToDevice);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
+    CUDA_COPY_TO(d_commondata, &commondata, sizeof(commondata_struct));
+    CUDA_COPY_TO(d_griddata, griddata, sizeof(griddata_struct));
 #endif
 
     //Launcing cooperative kernel for main simulation loop
@@ -353,11 +322,8 @@ to identify the apparent horizon with progressively refined grid resolutions.
 
 #ifdef __CUDACC__
     // Retrieve commondata & griddata from device
-    cudaMemcpy(&commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
-
-    cudaMemcpy(d_griddata, griddata, sizeof(griddata_struct), cudaMemcpyHostToDevice);
-    cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
+    CUDA_COPY_FROM(&commondata, d_commondata, sizeof(commondata_struct));
+    CUDA_COPY_FROM(d_griddata, griddata, sizeof(griddata_struct));
 #endif
 
     {
@@ -388,23 +354,17 @@ to identify the apparent horizon with progressively refined grid resolutions.
       if (commondata.is_final_iteration) {
         int NUM_DIAG_GFS = 5;
         int N_angle = griddata[grid].params.Nxx2;
+        MALLOC(commondata.diagnostics_arrays.metric_data_gfs,
+              griddata[grid].params.Nxx_plus_2NGHOSTS0 * griddata[grid].params.Nxx_plus_2NGHOSTS1 * griddata[grid].params.Nxx_plus_2NGHOSTS2 *
+                  NUM_DIAG_GFS * sizeof(REAL));
+        MALLOC(commondata.diagnostics_arrays.dst_pts, sizeof(REAL) * N_angle * 2);
+        MALLOC(commondata.diagnostics_arrays.integrand, N_angle * sizeof(REAL));
+        MALLOC(commondata.diagnostics_arrays.theta, N_angle * sizeof(REAL));
+        MALLOC(commondata.diagnostics_arrays.phi, N_angle * sizeof(REAL));
 #ifdef __CUDACC__
-        cudaMalloc((void**)&commondata.diagnostics_arrays.metric_data_gfs, griddata[grid].params.Nxx_plus_2NGHOSTS0 * griddata[grid].params.Nxx_plus_2NGHOSTS1 * griddata[grid].params.Nxx_plus_2NGHOSTS2 * NUM_DIAG_GFS * sizeof(REAL));
-        cudaMalloc((void**)&commondata.diagnostics_arrays.dst_pts, sizeof(REAL) * N_angle*2);
-        cudaMalloc((void**)&commondata.diagnostics_arrays.integrand, N_angle  * sizeof(REAL));
-        cudaMalloc((void**)&commondata.diagnostics_arrays.theta, N_angle  * sizeof(REAL));
-        cudaMalloc((void**)&commondata.diagnostics_arrays.phi, N_angle  * sizeof(REAL));
         // Update device side with diagnostics arrays allocations
-        cudaMemcpy(d_commondata, &commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
-        cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
-        cudaMemcpy(d_griddata, griddata, sizeof(griddata_struct), cudaMemcpyHostToDevice);
-        cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
-#else
-        BHAH_MALLOC(commondata.diagnostics_arrays.metric_data_gfs, griddata[grid].params.Nxx_plus_2NGHOSTS0 * griddata[grid].params.Nxx_plus_2NGHOSTS1 * griddata[grid].params.Nxx_plus_2NGHOSTS2 * NUM_DIAG_GFS * sizeof(REAL));
-        commondata.diagnostics_arrays.dst_pts = (REAL (*)[2])malloc(sizeof(REAL) * N_angle*2);
-        commondata.diagnostics_arrays.integrand = (REAL*)malloc(N_angle  * sizeof(REAL));
-        commondata.diagnostics_arrays.theta = (REAL*)malloc(N_angle  * sizeof(REAL));
-        commondata.diagnostics_arrays.phi = (REAL*)malloc(N_angle  * sizeof(REAL));
+        CUDA_COPY_TO(d_commondata, &commondata, sizeof(commondata_struct));
+        CUDA_COPY_TO(d_griddata, griddata, sizeof(griddata_struct));
 #endif
         if (commondata.diagnostics_arrays.metric_data_gfs == NULL || commondata.diagnostics_arrays.dst_pts == NULL || commondata.diagnostics_arrays.integrand== NULL || commondata.diagnostics_arrays.theta== NULL || commondata.diagnostics_arrays.phi == NULL) {
           if (commondata.diagnostics_arrays.metric_data_gfs != NULL)
@@ -423,10 +383,8 @@ to identify the apparent horizon with progressively refined grid resolutions.
 
       {
 #ifdef __CUDACC__
-        cudaMemcpy(d_commondata, &commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice);
-        cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
-        cudaMemcpy(d_griddata, griddata, sizeof(griddata_struct), cudaMemcpyHostToDevice);
-        cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
+        CUDA_COPY_TO(d_commondata, &commondata, sizeof(commondata_struct));
+        CUDA_COPY_TO(d_griddata, griddata, sizeof(griddata_struct));
         void *Args[] = {&d_commondata, &d_griddata, &compute_proper_circumferences};
         int sharesize;
         int threadsperblock = THREADSPERBLOCK << 1;
@@ -435,10 +393,8 @@ to identify the apparent horizon with progressively refined grid resolutions.
           sharesize = sizeof(REAL)*(INTERP_ORDER + (THREADSPERBLOCK*4)*INTERP_ORDER + THREADSPERBLOCK*INTERP_ORDER*INTERP_ORDER) + sizeof(REAL)*INTERP_ORDER;
         } while ( sharesize > 48000);
         COOPERATIVE_KERNEL(bah_diagnostics_full, Args, threadsperblock, sharesize);
-        cudaMemcpy(&commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost);
-        cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
-        cudaMemcpy(griddata, d_griddata, sizeof(griddata_struct), cudaMemcpyDeviceToHost);
-        cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure"); 
+        CUDA_COPY_FROM(&commondata, d_commondata, sizeof(commondata_struct));
+        CUDA_COPY_FROM(griddata, d_griddata, sizeof(griddata_struct));
 #else
         bah_diagnostics_full(&commondata, griddata, compute_proper_circumferences);
 #endif
@@ -460,11 +416,7 @@ to identify the apparent horizon with progressively refined grid resolutions.
     if (commondata.error_flag == BHAHAHA_SUCCESS  && !commondata.is_final_iteration) {
       // Allocate memory for storing coarse horizon data.
       const int total_points = Nxx_plus_2NGHOSTS1 * Nxx_plus_2NGHOSTS2;
-#ifdef __CUDACC__
-      cudaMalloc((void**)&commondata.coarse_horizon, sizeof(REAL) * total_points);
-#else
-      commondata.coarse_horizon = (double *)malloc(sizeof(REAL) * total_points);
-#endif
+      MALLOC(commondata.coarse_horizon, sizeof(REAL) * total_points);
 
       // Save grid parameters for the coarse horizon to maintain consistency.
       commondata.coarse_horizon_dxx1 = params->dxx1;
@@ -473,50 +425,38 @@ to identify the apparent horizon with progressively refined grid resolutions.
       commondata.coarse_horizon_Nxx_plus_2NGHOSTS2 = Nxx_plus_2NGHOSTS2;
 
       // Allocate coordinate arrays for the coarse horizon.
-#ifdef __CUDACC__
-      cudaMalloc((void**)&commondata.coarse_horizon_r_theta_phi[0], sizeof(REAL) * Nxx_plus_2NGHOSTS0);
-      cudaMalloc((void**)&commondata.coarse_horizon_r_theta_phi[1], sizeof(REAL) * Nxx_plus_2NGHOSTS1);
-      cudaMalloc((void**)&commondata.coarse_horizon_r_theta_phi[2], sizeof(REAL) * Nxx_plus_2NGHOSTS2);
-#else
-      commondata.coarse_horizon_r_theta_phi[0] = (double *)malloc(sizeof(REAL) * Nxx_plus_2NGHOSTS0);
-      commondata.coarse_horizon_r_theta_phi[1] = (double *)malloc(sizeof(REAL) * Nxx_plus_2NGHOSTS1);
-      commondata.coarse_horizon_r_theta_phi[2] = (double *)malloc(sizeof(REAL) * Nxx_plus_2NGHOSTS2);
-#endif
+      MALLOC(commondata.coarse_horizon_r_theta_phi[0], sizeof(REAL) * Nxx_plus_2NGHOSTS0);
+      MALLOC(commondata.coarse_horizon_r_theta_phi[1], sizeof(REAL) * Nxx_plus_2NGHOSTS1);
+      MALLOC(commondata.coarse_horizon_r_theta_phi[2], sizeof(REAL) * Nxx_plus_2NGHOSTS2);
 
 #ifdef __CUDACC__
       // Update device side copy of commondata and griddata
-      cudaMemcpy(d_commondata, &commondata, sizeof(commondata_struct), cudaMemcpyHostToDevice); 
-      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
-      cudaMemcpy(d_griddata, griddata, sizeof(griddata_struct), cudaMemcpyHostToDevice); 
-      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+      CUDA_COPY_TO(d_commondata, &commondata, sizeof(commondata_struct));
+      CUDA_COPY_TO(d_griddata, griddata, sizeof(griddata_struct));
 #endif
 
 #ifdef __CUDACC__
       bah_store_horizon<<<12,64>>>(d_commondata, d_griddata);
+      cudaCheckErrors(cudaKernel, "bah_store_horizon failure");
       cudaDeviceSynchronize();
 #else
       bah_store_horizon(&commondata, griddata);
 #endif
     } else { // IF: Horizon found at final resolution or horizon too large
 #ifdef __CUDACC__
-      //Deep retrieveal of commondata from device if final iteration or 1D interpolation was too large
-      cudaMemcpy(&commondata, d_commondata, sizeof(commondata_struct), cudaMemcpyDeviceToHost); 
-      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
-      cudaMemcpy(griddata, d_griddata, sizeof(griddata_struct), cudaMemcpyDeviceToHost); 
-      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+      // Deep retrieveal of commondata from device if final iteration or 1D interpolation was too large
+      CUDA_COPY_FROM(&commondata, d_commondata, sizeof(commondata_struct));
+      CUDA_COPY_FROM(griddata, d_griddata, sizeof(griddata_struct));
 
-      cudaMemcpy(h_bhahaha_diagnostics, d_bhahaha_diagnostics, sizeof(bhahaha_diagnostics_struct), cudaMemcpyDeviceToHost);
-      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+      CUDA_COPY_FROM(h_bhahaha_diagnostics, d_bhahaha_diagnostics, sizeof(bhahaha_diagnostics_struct));
       commondata.bhahaha_diagnostics = h_bhahaha_diagnostics;
-  
-      cudaMemcpy(h_bhahaha_params_and_data, d_bhahaha_params_and_data, sizeof(bhahaha_params_and_data_struct), cudaMemcpyDeviceToHost);
-      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+
+      CUDA_COPY_FROM(h_bhahaha_params_and_data, d_bhahaha_params_and_data, sizeof(bhahaha_params_and_data_struct));
       commondata.bhahaha_params_and_data = h_bhahaha_params_and_data;
 
       REAL *d_y_n_gfs = griddata[0].gridfuncs.y_n_gfs;
-      REAL *h_y_n_gfs = (REAL*)malloc(sizeof(REAL)*Nxx_plus_2NGHOSTS_tot*NUM_EVOL_GFS);
-      cudaMemcpy(h_y_n_gfs, d_y_n_gfs, sizeof(REAL)*Nxx_plus_2NGHOSTS_tot*NUM_EVOL_GFS,cudaMemcpyDeviceToHost);
-      cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+      REAL *h_y_n_gfs = (REAL *)malloc(sizeof(REAL) * Nxx_plus_2NGHOSTS_tot * NUM_EVOL_GFS);
+      CUDA_COPY_FROM(h_y_n_gfs, d_y_n_gfs, sizeof(REAL) * Nxx_plus_2NGHOSTS_tot * NUM_EVOL_GFS);
       griddata[0].gridfuncs.y_n_gfs = h_y_n_gfs;
 #endif
       if (commondata.error_flag == BHAHAHA_SUCCESS  && commondata.is_final_iteration) {
@@ -524,16 +464,14 @@ to identify the apparent horizon with progressively refined grid resolutions.
         const int NUM_THETA = params->Nxx1; // Required for IDX2() macro.
 #ifdef __CUDACC__
         //Deep copy of prev_horizon_m3,2,1
-        cudaMemcpy(h_prev_horizon_m3, commondata.bhahaha_params_and_data->prev_horizon_m2, sizeof(REAL) * NUM_THETA * params->Nxx2, cudaMemcpyDeviceToHost);
-        cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
-        cudaMemcpy(h_prev_horizon_m2, commondata.bhahaha_params_and_data->prev_horizon_m1, sizeof(REAL) * NUM_THETA * params->Nxx2, cudaMemcpyDeviceToHost);
-        cudaCheckErrors(cudaMemcpy, "cudaCopyTo failure");
+        CUDA_COPY_FROM(h_prev_horizon_m3, commondata.bhahaha_params_and_data->prev_horizon_m2, sizeof(REAL) * NUM_THETA * params->Nxx2);
+        CUDA_COPY_FROM(h_prev_horizon_m2, commondata.bhahaha_params_and_data->prev_horizon_m1, sizeof(REAL) * NUM_THETA * params->Nxx2);
         commondata.bhahaha_params_and_data->prev_horizon_m3 = h_prev_horizon_m3;
         commondata.bhahaha_params_and_data->prev_horizon_m2 = h_prev_horizon_m2;
         commondata.bhahaha_params_and_data->prev_horizon_m1 = h_prev_horizon_m1;
-        cudaFree(d_prev_horizon_m1);
-        cudaFree(d_prev_horizon_m2);
-        cudaFree(d_prev_horizon_m3);
+        CUDA_FREE(d_prev_horizon_m1);
+        CUDA_FREE(d_prev_horizon_m2);
+        CUDA_FREE(d_prev_horizon_m3);
 #else 
         memcpy(commondata.bhahaha_params_and_data->prev_horizon_m3, commondata.bhahaha_params_and_data->prev_horizon_m2,
                sizeof(REAL) * NUM_THETA * params->Nxx2);
@@ -581,19 +519,14 @@ to identify the apparent horizon with progressively refined grid resolutions.
     // Step 8: Release all allocated memory for the current grid resolution.
     free_all_but_external_input_gfs(&commondata, griddata);
 #ifdef __CUDACC__ 
-    //Free per iteration device side copies
-    cudaFree(d_griddata);
-    cudaCheckErrors(cudaFree, "cudaFree failure");
-    cudaFree(commondata.norms);
-    cudaCheckErrors(cudaFree, "cudaFree failure");
-    //Free device side copies 
+    // Free per iteration device side copies
+    CUDA_FREE(d_griddata);
+    CUDA_FREE(commondata.norms);
+    // Free device side copies
     if (commondata.is_final_iteration) {
-      cudaFree(d_commondata);
-      cudaCheckErrors(cudaFree, "cudaFree failure");
-      cudaFree(d_bhahaha_diagnostics);
-      cudaCheckErrors(cudaFree, "cudaFree failure");
-      cudaFree(d_bhahaha_params_and_data);
-      cudaCheckErrors(cudaFree, "cudaFree failure");
+      CUDA_FREE(d_commondata);
+      CUDA_FREE(d_bhahaha_diagnostics);
+      CUDA_FREE(d_bhahaha_params_and_data);
     }
 #endif
 
